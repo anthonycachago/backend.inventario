@@ -1,0 +1,20 @@
+@if (Dias < 0)
+{
+    <span class="badge text-bg-danger">Vencido hace @(-Dias) d</span>
+}
+else if (Dias == 0)
+{
+    <span class="badge text-bg-danger">Vence hoy</span>
+}
+else if (Dias <= ReglasInventario.DiasAlertaVencimiento)
+{
+    <span class="badge text-bg-warning">Vence en @Dias d</span>
+}
+else
+{
+    <span class="badge text-bg-success">@Dias d</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public int Dias { get; set; }
+}

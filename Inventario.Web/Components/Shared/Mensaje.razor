@@ -1,0 +1,25 @@
+@if (!string.IsNullOrEmpty(Texto))
+{
+    <div class="alert alert-@Tipo d-flex align-items-start gap-2" role="alert">
+        <i class="bi @Icono mt-1"></i>
+        <div class="flex-grow-1">@Texto</div>
+        <button type="button" class="btn-close" aria-label="Cerrar" @onclick="Cerrar"></button>
+    </div>
+}
+
+@code {
+    [Parameter] public string? Texto { get; set; }
+    [Parameter] public EventCallback<string?> TextoChanged { get; set; }
+    /// <summary>success | danger | warning | info</summary>
+    [Parameter] public string Tipo { get; set; } = "success";
+
+    private string Icono => Tipo switch
+    {
+        "success" => "bi-check-circle-fill",
+        "danger" => "bi-x-octagon-fill",
+        "warning" => "bi-exclamation-triangle-fill",
+        _ => "bi-info-circle-fill"
+    };
+
+    private Task Cerrar() => TextoChanged.InvokeAsync(null);
+}

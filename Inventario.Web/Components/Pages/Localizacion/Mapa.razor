@@ -1,0 +1,124 @@
+@page "/localizacion/mapa"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Mapa de bodega</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-grid-3x3-gap-fill"></i> Mapa de bodega</h1>
+    <select class="form-select w-auto" @bind="Bodega" @bind:after="CargarAsync">
+        <option value="">Todas las bodegas</option>
+        @foreach (var b in bodegas)
+        {
+            <option value="@b.Id">@b.Codigo · @b.Nombre</option>
+        }
+    </select>
+</div>
+
+<div class="d-flex flex-wrap gap-3 small mb-3 text-body-secondary">
+    <span><i class="bi bi-square-fill text-success"></i> &lt; 70 %</span>
+    <span><i class="bi bi-square-fill text-warning"></i> 70 – 90 %</span>
+    <span><i class="bi bi-square-fill text-danger"></i> &gt; 90 %</span>
+    <span><i class="bi bi-square-fill text-secondary"></i> Sin capacidad definida</span>
+    <span><i class="bi bi-thermometer-half text-danger"></i> Temperatura fuera de ±@ReglasInventario.ToleranciaTemperatura °C</span>
+</div>
+
+@if (celdas is null)
+{
+    <p class="text-body-secondary">Cargando…</p>
+}
+else if (celdas.Count == 0)
+{
+    <div class="alert alert-info">No hay ubicaciones registradas.</div>
+}
+else
+{
+    @foreach (var grupoBodega in celdas.GroupBy(c => c.Bodega))
+    {
+        <h2 class="h5 mt-3"><i class="bi bi-building"></i> @grupoBodega.Key</h2>
+        @foreach (var zona in grupoBodega.GroupBy(c => new { c.Zona, c.Tipo }).OrderBy(z => z.Key.Zona))
+        {
+            var ocupado = zona.Sum(c => c.OcupadoKg);
+            var capacidad = zona.Sum(c => c.CapacidadKg ?? 0);
+            <div class="card mb-3">
+                <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                    <span class="fw-semibold">Zona @zona.Key.Zona</span>
+                    <span class="badge @(Enum.TryParse<TipoUbicacion>(zona.Key.Tipo, out var t) ? t.ClaseBadge() : "")">@Textos.NombreTipoUbicacion(zona.Key.Tipo)</span>
+                    <span class="ms-auto small text-body-secondary">
+                        @ocupado.ToString("N0") kg @(capacidad > 0 ? $"de {capacidad:N0} kg ({ocupado * 100 / capacidad:N0} %)" : "")
+                    </span>
+                </div>
+                <div class="card-body">
+                    <div class="mapa-grid">
+                        @foreach (var c in zona.OrderBy(c => c.Codigo))
+                        {
+                            var alerta = ReglasInventario.TemperaturaFueraDeRango(c.TemperaturaObjetivo, c.UltimaTemperatura);
+                            <a class="mapa-celda text-reset text-decoration-none @ClaseOcupacion(c) @(c.Activo ? "" : "inactiva")"
+                               href="@($"inventario/existencias?ubicacion={c.UbicacionId}")" title="Ver existencias de @c.Codigo">
+                                <div class="d-flex justify-content-between">
+                                    <span class="fw-semibold">@c.Codigo</span>
+                                    @if (c.LotesDistintos > 0)
+                                    {
+                                        <span class="badge rounded-pill text-bg-secondary">@c.LotesDistintos</span>
+                                    }
+                                </div>
+                                <div class="text-body-secondary">@c.OcupadoKg.ToString("N0") @(c.CapacidadKg is null ? "kg" : $"/ {c.CapacidadKg:N0} kg")</div>
+                                @if (c.PorcentajeOcupacion is not null)
+                                {
+                                    <div class="progress my-1" role="progressbar" aria-valuenow="@c.PorcentajeOcupacion" aria-valuemin="0" aria-valuemax="100">
+                                        <div class="progress-bar @ColorBarra(c.PorcentajeOcupacion.Value)" style="width:@(Math.Min(c.PorcentajeOcupacion.Value, 100).ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                    </div>
+                                }
+                                @if (c.UltimaTemperatura is not null)
+                                {
+                                    <div class="@(alerta ? "text-danger fw-semibold" : "text-body-secondary")">
+                                        <i class="bi bi-thermometer-half"></i> @c.UltimaTemperatura?.ToString("N1") °C
+                                        <span class="small">(obj. @c.TemperaturaObjetivo?.ToString("N1"))</span>
+                                    </div>
+                                }
+                            </a>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "bodega")]
+    public int? Bodega { get; set; }
+
+    private List<Bodega> bodegas = [];
+    private List<OcupacionUbicacionVista>? celdas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        bodegas = await db.Bodegas.AsNoTracking().OrderBy(b => b.Codigo).ToListAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        celdas = await db.OcupacionUbicaciones.AsNoTracking()
+            .Where(c => Bodega == null || c.BodegaId == Bodega)
+            .OrderBy(c => c.Bodega).ThenBy(c => c.Codigo)
+            .ToListAsync();
+    }
+
+    private static string ClaseOcupacion(OcupacionUbicacionVista c) => c.PorcentajeOcupacion switch
+    {
+        null => "ocupacion-na",
+        < 70 => "ocupacion-baja",
+        <= 90 => "ocupacion-media",
+        _ => "ocupacion-alta"
+    };
+
+    private static string ColorBarra(decimal porcentaje) => porcentaje switch
+    {
+        < 70 => "bg-success",
+        <= 90 => "bg-warning",
+        _ => "bg-danger"
+    };
+}

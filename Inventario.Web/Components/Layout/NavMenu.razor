@@ -1,30 +1,66 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
+<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
-        <a class="navbar-brand" href="">Inventario.Web</a>
+        <a class="navbar-brand d-flex align-items-center gap-2" href="">
+            <i class="bi bi-box-seam-fill"></i> Inventario
+        </a>
     </div>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<input type="checkbox" title="Menú de navegación" class="navbar-toggler" />
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
+                <i class="bi bi-speedometer2"></i> Panel
             </NavLink>
         </div>
 
+        <div class="nav-seccion">Operación</div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="counter">
-                <span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-            </NavLink>
+            <NavLink class="nav-link" href="inventario/recepcion"><i class="bi bi-box-arrow-in-down"></i> Recepción</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="inventario/despacho"><i class="bi bi-truck"></i> Despacho FEFO</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="inventario/movimientos"><i class="bi bi-arrow-left-right"></i> Movimientos</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="localizacion/temperaturas"><i class="bi bi-thermometer-snow"></i> Temperaturas</NavLink>
         </div>
 
+        <div class="nav-seccion">Consultas</div>
         <div class="nav-item px-3">
-            <NavLink class="nav-link" href="weather">
-                <span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-            </NavLink>
+            <NavLink class="nav-link" href="inventario/existencias"><i class="bi bi-boxes"></i> Existencias</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="inventario/lotes"><i class="bi bi-upc-scan"></i> Lotes</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="inventario/kardex"><i class="bi bi-journal-text"></i> Kardex</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="localizacion/mapa"><i class="bi bi-grid-3x3-gap-fill"></i> Mapa de bodega</NavLink>
+        </div>
+
+        <div class="nav-seccion">Localización</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="localizacion/bodegas"><i class="bi bi-buildings"></i> Bodegas</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="localizacion/ubicaciones"><i class="bi bi-geo-alt-fill"></i> Ubicaciones</NavLink>
+        </div>
+
+        <div class="nav-seccion">Catálogos</div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="catalogos/productos"><i class="bi bi-tags-fill"></i> Productos</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="catalogos/categorias"><i class="bi bi-diagram-3-fill"></i> Categorías</NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="catalogos/proveedores"><i class="bi bi-people-fill"></i> Proveedores</NavLink>
         </div>
     </nav>
 </div>
-

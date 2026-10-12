@@ -1,7 +1,223 @@
-﻿@page "/"
+@page "/"
+@inject IDbContextFactory<AppDbContext> DbFactory
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Panel · Inventario</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="page-header">
+    <h1><i class="bi bi-speedometer2"></i> Panel de inventario</h1>
+    <div class="d-flex gap-2">
+        <a class="btn btn-success" href="inventario/recepcion"><i class="bi bi-box-arrow-in-down"></i> Recepción</a>
+        <a class="btn btn-primary" href="inventario/despacho"><i class="bi bi-truck"></i> Despacho</a>
+    </div>
+</div>
 
-Welcome to your new app.
+@if (cargando)
+{
+    <p class="text-body-secondary">Cargando…</p>
+}
+else
+{
+    <div class="row g-3 mb-3">
+        <div class="col-sm-6 col-xl-3">
+            <TarjetaKpi Titulo="Valor del inventario" Valor="@valorInventario.ToString("C0")" Icono="bi-cash-stack" Color="primary"
+                        Detalle="@($"{stockKg:N0} kg en {lotesConStock} lotes")" />
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <TarjetaKpi Titulo="Lotes vencidos / por vencer" Valor="@($"{vencidos} / {porVencer.Count - vencidos}")" Icono="bi-calendar-x"
+                        Color="@(porVencer.Count > 0 ? "warning" : "success")" Detalle="@($"Próximos {ReglasInventario.DiasAlertaVencimiento} días")" />
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <TarjetaKpi Titulo="Productos bajo stock mínimo" Valor="@bajoMinimo.Count.ToString()" Icono="bi-graph-down-arrow"
+                        Color="@(bajoMinimo.Count > 0 ? "danger" : "success")" Detalle="@($"de {totalProductos} productos activos")" />
+        </div>
+        <div class="col-sm-6 col-xl-3">
+            <TarjetaKpi Titulo="Alertas de temperatura" Valor="@alertasTemperatura.Count.ToString()" Icono="bi-thermometer-high"
+                        Color="@(alertasTemperatura.Count > 0 ? "danger" : "success")" Detalle="Última lectura por ubicación" />
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header d-flex">
+                    <span class="fw-semibold me-auto"><i class="bi bi-calendar-x"></i> Vencidos y por vencer</span>
+                    <a class="small" href="inventario/existencias">Ver existencias</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Producto</th><th>Lote</th><th>Ubicación</th><th class="num">Cantidad</th><th>Estado</th></tr></thead>
+                        <tbody>
+                            @foreach (var s in porVencer.Take(8))
+                            {
+                                <tr>
+                                    <td>@s.Producto</td>
+                                    <td><code>@s.Lote</code></td>
+                                    <td>@s.Bodega · @s.Ubicacion</td>
+                                    <td class="num">@s.Cantidad.ToString("N3") @Textos.Abreviatura(s.UnidadMedida)</td>
+                                    <td><EstadoVencimiento Dias="s.DiasParaVencer" /></td>
+                                </tr>
+                            }
+                            @if (porVencer.Count == 0)
+                            {
+                                <tr><td colspan="5" class="text-center text-body-secondary py-3"><i class="bi bi-check-circle text-success"></i> Sin lotes próximos a vencer.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-6">
+            <div class="card h-100">
+                <div class="card-header d-flex">
+                    <span class="fw-semibold me-auto"><i class="bi bi-graph-down-arrow"></i> Bajo stock mínimo</span>
+                    <a class="small" href="catalogos/productos">Ver productos</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Producto</th><th>Categoría</th><th class="num">Stock</th><th class="num">Mínimo</th><th style="width:25%"></th></tr></thead>
+                        <tbody>
+                            @foreach (var p in bajoMinimo.Take(8))
+                            {
+                                var pct = p.StockMinimo == 0 ? 0 : Math.Min(100, p.StockTotal * 100 / p.StockMinimo);
+                                <tr>
+                                    <td>@p.Producto</td>
+                                    <td>@p.Categoria</td>
+                                    <td class="num">@p.StockTotal.ToString("N1")</td>
+                                    <td class="num">@p.StockMinimo.ToString("N1") @Textos.Abreviatura(p.UnidadMedida)</td>
+                                    <td>
+                                        <div class="progress" style="height:6px">
+                                            <div class="progress-bar bg-danger" style="width:@(pct.ToString("0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                            @if (bajoMinimo.Count == 0)
+                            {
+                                <tr><td colspan="5" class="text-center text-body-secondary py-3"><i class="bi bi-check-circle text-success"></i> Todos los productos sobre el mínimo.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-5">
+            <div class="card h-100">
+                <div class="card-header d-flex">
+                    <span class="fw-semibold me-auto"><i class="bi bi-buildings"></i> Ocupación por bodega</span>
+                    <a class="small" href="localizacion/mapa">Ver mapa</a>
+                </div>
+                <div class="card-body">
+                    @foreach (var b in ocupacion.GroupBy(o => o.Bodega))
+                    {
+                        var cap = b.Sum(o => o.CapacidadKg ?? 0);
+                        var ocu = b.Sum(o => o.OcupadoKg);
+                        var pct = cap == 0 ? 0 : ocu * 100 / cap;
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between small">
+                                <span class="fw-semibold">@b.Key</span>
+                                <span>@ocu.ToString("N0") / @cap.ToString("N0") kg (@pct.ToString("N0") %)</span>
+                            </div>
+                            <div class="progress" style="height:10px">
+                                <div class="progress-bar @(pct > 90 ? "bg-danger" : pct >= 70 ? "bg-warning" : "bg-success")"
+                                     style="width:@(Math.Min(pct, 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            </div>
+                        </div>
+                    }
+                    @if (alertasTemperatura.Count > 0)
+                    {
+                        <h3 class="h6 mt-4 text-danger"><i class="bi bi-thermometer-high"></i> Temperatura fuera de rango</h3>
+                        <ul class="list-unstyled small mb-0">
+                            @foreach (var a in alertasTemperatura)
+                            {
+                                <li>
+                                    <code>@a.Codigo</code> (@a.Bodega): <strong>@a.UltimaTemperatura?.ToString("N1") °C</strong>,
+                                    objetivo @a.TemperaturaObjetivo?.ToString("N1") °C · @a.FechaUltimaTemperatura?.ToString("dd/MM HH:mm")
+                                </li>
+                            }
+                        </ul>
+                    }
+                    @if (ocupacion.Count == 0)
+                    {
+                        <p class="text-body-secondary mb-0">Defina bodegas y ubicaciones para ver la ocupación.</p>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-7">
+            <div class="card h-100">
+                <div class="card-header d-flex">
+                    <span class="fw-semibold me-auto"><i class="bi bi-clock-history"></i> Últimos movimientos</span>
+                    <a class="small" href="inventario/kardex">Ver kardex</a>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Fecha</th><th>Tipo</th><th>Producto</th><th>Lote</th><th class="num">Cantidad</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in ultimos)
+                            {
+                                <tr>
+                                    <td class="text-nowrap small">@m.Fecha.ToString("dd/MM HH:mm")</td>
+                                    <td><span class="badge @m.Tipo.ClaseBadge()">@m.Tipo.Nombre()</span></td>
+                                    <td>@m.Lote.Producto.Nombre</td>
+                                    <td><code>@m.Lote.Codigo</code></td>
+                                    <td class="num">@m.Cantidad.ToString("N3")</td>
+                                </tr>
+                            }
+                            @if (ultimos.Count == 0)
+                            {
+                                <tr><td colspan="5" class="text-center text-body-secondary py-3">Aún no hay movimientos.</td></tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool cargando = true;
+    private decimal valorInventario;
+    private decimal stockKg;
+    private int lotesConStock;
+    private int totalProductos;
+    private int vencidos;
+    private List<StockUbicacionVista> porVencer = [];
+    private List<StockProductoVista> bajoMinimo = [];
+    private List<OcupacionUbicacionVista> ocupacion = [];
+    private List<OcupacionUbicacionVista> alertasTemperatura = [];
+    private List<MovimientoInventario> ultimos = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+
+        var stock = await db.StockPorUbicacion.AsNoTracking().ToListAsync();
+        valorInventario = stock.Sum(s => s.Cantidad * s.CostoUnitario);
+        lotesConStock = stock.Select(s => s.LoteId).Distinct().Count();
+        porVencer = stock.Where(s => s.DiasParaVencer <= ReglasInventario.DiasAlertaVencimiento)
+            .OrderBy(s => s.DiasParaVencer).ToList();
+        vencidos = porVencer.Count(s => s.DiasParaVencer < 0);
+
+        var productos = await db.StockPorProducto.AsNoTracking().ToListAsync();
+        totalProductos = productos.Count;
+        bajoMinimo = productos.Where(p => p.BajoMinimo).OrderBy(p => p.StockMinimo == 0 ? 1 : p.StockTotal / p.StockMinimo).ToList();
+
+        ocupacion = await db.OcupacionUbicaciones.AsNoTracking().Where(o => o.Activo).ToListAsync();
+        stockKg = ocupacion.Sum(o => o.OcupadoKg);
+        alertasTemperatura = ocupacion
+            .Where(o => ReglasInventario.TemperaturaFueraDeRango(o.TemperaturaObjetivo, o.UltimaTemperatura))
+            .ToList();
+
+        ultimos = await db.MovimientosInventario.AsNoTracking()
+            .Include(m => m.Lote).ThenInclude(l => l.Producto)
+            .OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Id)
+            .Take(10)
+            .ToListAsync();
+
+        cargando = false;
+    }
+}

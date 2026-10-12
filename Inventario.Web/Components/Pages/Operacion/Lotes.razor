@@ -1,0 +1,86 @@
+@page "/inventario/lotes"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Lotes</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-upc-scan"></i> Lotes y trazabilidad</h1>
+    <div class="d-flex gap-2 flex-wrap">
+        <select class="form-select w-auto" @bind="estado">
+            <option value="vigentes">Con stock</option>
+            <option value="agotados">Agotados</option>
+            <option value="todos">Todos</option>
+        </select>
+        <input class="form-control w-auto" placeholder="Lote, producto, proveedor…" @bind="filtro" @bind:event="oninput" />
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Lote</th><th>Producto</th><th>Proveedor / Origen</th><th>Ingreso</th><th>Captura</th>
+                    <th>Vencimiento</th><th class="num">Stock</th><th class="num">Costo unit.</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var l in Filas)
+                {
+                    var dias = (l.FechaVencimiento.Date - DateTime.Today).Days;
+                    <tr>
+                        <td><code>@l.Codigo</code></td>
+                        <td>@l.Producto</td>
+                        <td class="small">@l.Proveedor<br /><span class="text-body-secondary">@l.Origen</span></td>
+                        <td class="text-nowrap">@l.FechaIngreso.ToString("dd/MM/yyyy")</td>
+                        <td class="text-nowrap">@l.FechaCaptura?.ToString("dd/MM/yyyy")</td>
+                        <td class="text-nowrap">@l.FechaVencimiento.ToString("dd/MM/yyyy") @if (l.Stock > 0) { <EstadoVencimiento Dias="dias" /> }</td>
+                        <td class="num fw-semibold">@l.Stock.ToString("N3") @l.Unidad.Abreviatura()</td>
+                        <td class="num">@l.CostoUnitario.ToString("C4")</td>
+                        <td class="text-end text-nowrap">
+                            @if (!string.IsNullOrEmpty(l.CertificadoSanitario))
+                            {
+                                <span class="badge text-bg-light border" title="Certificado sanitario"><i class="bi bi-patch-check"></i> @l.CertificadoSanitario</span>
+                            }
+                            <a class="btn btn-sm btn-outline-primary" title="Kardex del lote" href="@($"inventario/kardex?lote={l.Id}")"><i class="bi bi-journal-text"></i></a>
+                        </td>
+                    </tr>
+                }
+                @if (!Filas.Any())
+                {
+                    <tr><td colspan="9" class="text-center text-body-secondary py-4">Sin lotes.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private record FilaLote(int Id, string Codigo, string Producto, UnidadMedida Unidad, string? Proveedor, string? Origen,
+        string? CertificadoSanitario, DateTime FechaIngreso, DateTime? FechaCaptura, DateTime FechaVencimiento,
+        decimal CostoUnitario, decimal Stock);
+
+    private List<FilaLote> lotes = [];
+    private string estado = "vigentes";
+    private string filtro = string.Empty;
+
+    private IEnumerable<FilaLote> Filas => lotes
+        .Where(l => estado switch { "vigentes" => l.Stock > 0, "agotados" => l.Stock == 0, _ => true })
+        .Where(l => string.IsNullOrWhiteSpace(filtro)
+                    || l.Codigo.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                    || l.Producto.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                    || (l.Proveedor?.Contains(filtro, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        lotes = await db.Lotes.AsNoTracking()
+            .OrderByDescending(l => l.FechaIngreso)
+            .Select(l => new FilaLote(l.Id, l.Codigo, l.Producto.Nombre, l.Producto.UnidadMedida,
+                l.Proveedor != null ? l.Proveedor.RazonSocial : null, l.Origen, l.CertificadoSanitario,
+                l.FechaIngreso, l.FechaCaptura, l.FechaVencimiento, l.CostoUnitario,
+                l.Existencias.Sum(e => (decimal?)e.Cantidad) ?? 0))
+            .Take(1000)
+            .ToListAsync();
+    }
+}

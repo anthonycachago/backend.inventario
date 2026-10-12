@@ -1,0 +1,7 @@
+@* Botón de tema sin estado en .NET: el texto y el ícono se eligen por CSS según data-bs-theme
+   y el clic llama directo a tema.js, así funciona desde el primer pintado (antes de conectar el circuito). *@
+<button type="button" class="btn btn-sm btn-outline-secondary tema-toggle" onclick="temaInventario.alternar()"
+        title="Cambiar entre modo claro y oscuro">
+    <span class="tema-si-claro"><i class="bi bi-moon-stars-fill"></i><span class="d-none d-sm-inline ms-1">Modo oscuro</span></span>
+    <span class="tema-si-oscuro"><i class="bi bi-sun-fill"></i><span class="d-none d-sm-inline ms-1">Modo claro</span></span>
+</button>
