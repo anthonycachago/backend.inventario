@@ -1,0 +1,19 @@
+@if (Venta.Saldo == 0)
+{
+    <span class="badge text-bg-success">Pagada</span>
+}
+else if (DiasVencida > 0)
+{
+    <span class="badge text-bg-danger">Vencida hace @DiasVencida d</span>
+}
+else
+{
+    <span class="badge text-bg-warning">Por cobrar@(Venta.FechaVencimiento is { } f ? $" · vence {f:dd/MM}" : "")</span>
+}
+
+@code {
+    [Parameter, EditorRequired] public Venta Venta { get; set; } = default!;
+
+    // Una venta de contado con saldo (pago anulado) se considera exigible desde su fecha
+    private int DiasVencida => (DateTime.Today - (Venta.FechaVencimiento ?? Venta.Fecha).Date).Days;
+}

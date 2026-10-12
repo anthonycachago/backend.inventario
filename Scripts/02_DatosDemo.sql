@@ -46,6 +46,24 @@ INSERT INTO inv.Productos (Codigo, Nombre, NombreCientifico, Presentacion, Unida
  ('CAL-ANI',      N'Calamar en anillos',           N'Dosidicus gigas',      N'Anillos',  'Kilogramo', 'Congelado',  -25, -18, 300,  400, 1, 4),
  ('CON-NEG',      N'Concha negra',                 N'Anadara tuberculosa',  N'En valva', 'Unidad',    'Fresco',       2,   6,   5, 1000, 1, 3);
 
+-- Precios de venta (IVA 0 %: mariscos frescos/congelados en estado natural; 15 %: procesados)
+UPDATE p SET PrecioVenta = v.Precio, TarifaIva = v.Iva
+FROM inv.Productos p
+JOIN (VALUES ('CAM-ENT-2030', 6.90, 0), ('CAM-COL-3140', 8.75, 0), ('ATU-LOM', 10.50, 0), ('DOR-FIL', 7.80, 0),
+             ('COR-FRE', 4.95, 0), ('PUL-ENT', 9.60, 0), ('CAL-ANI', 6.20, 15), ('CON-NEG', 0.30, 0)) v(Codigo, Precio, Iva)
+  ON v.Codigo = p.Codigo;
+
+------------------------------------------------------------------ Clientes
+IF NOT EXISTS (SELECT 1 FROM inv.Clientes WHERE Identificacion = '9999999999999')
+    INSERT INTO inv.Clientes (TipoIdentificacion, Identificacion, RazonSocial, LimiteCredito, DiasCredito, Activo)
+    VALUES ('ConsumidorFinal', '9999999999999', N'CONSUMIDOR FINAL', 0, 0, 1);
+
+-- RUC ficticios con formato válido (verificados como inexistentes en el SRI)
+INSERT INTO inv.Clientes (TipoIdentificacion, Identificacion, RazonSocial, Telefono, Email, Direccion, LimiteCredito, DiasCredito, Activo) VALUES
+ ('Ruc', '0990000001001', N'Restaurante La Cevichería Demo S.A.', '042 300 100', 'compras@cevicheria-demo.ec', N'Av. Francisco de Orellana, Guayaquil', 5000, 30, 1),
+ ('Ruc', '1390000004001', N'Distribuidora Marisquera Demo Cía. Ltda.', '052 610 200', 'pagos@marisquera-demo.ec', N'Av. 4 de Noviembre, Manta', 15000, 45, 1),
+ ('Ruc', '1790000003001', N'Supermercados Demo S.A.', '022 450 300', NULL, N'Av. Amazonas, Quito', 0, 0, 1);
+
 ------------------------------------------------------------------ Bodegas
 INSERT INTO inv.Bodegas (Codigo, Nombre, Direccion, Ciudad, Latitud, Longitud, Activo) VALUES
  ('BOD-GYE', N'Centro de frío Guayaquil', N'Km 10.5 vía a Daule', N'Guayaquil', -2.090500, -79.937800, 1),

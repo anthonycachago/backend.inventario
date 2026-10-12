@@ -102,5 +102,10 @@ public class MovimientoInventarioConfiguration : IEntityTypeConfiguration<Movimi
             .WithMany()
             .HasForeignKey(x => x.UsuarioId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(x => x.Venta)
+            .WithMany(x => x.Movimientos)
+            .HasForeignKey(x => x.VentaId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

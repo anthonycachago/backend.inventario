@@ -25,6 +25,9 @@ public class Producto
     public decimal? TemperaturaMaxima { get; set; }
     public int DiasVidaUtil { get; set; }
     public decimal StockMinimo { get; set; }
+    public decimal PrecioVenta { get; set; }
+    /// <summary>Porcentaje de IVA: 0 para mariscos frescos/congelados en estado natural, 15 para procesados.</summary>
+    public decimal TarifaIva { get; set; }
     public bool Activo { get; set; } = true;
     public DateTime FechaCreacion { get; set; }
 

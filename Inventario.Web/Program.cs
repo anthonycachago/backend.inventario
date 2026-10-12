@@ -2,6 +2,7 @@ using System.Globalization;
 using Inventario.Web.Components;
 using Inventario.Web.Domain;
 using Inventario.Web.Services;
+using Inventario.Web.Services.Sri;
 using Microsoft.EntityFrameworkCore;
 
 // Formato de números y fechas en español (Ecuador): 1.234,50 y dd/MM/yyyy
@@ -20,6 +21,16 @@ builder.Services.AddDbContextFactory<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
 
 builder.Services.AddScoped<InventarioService>();
+builder.Services.AddScoped<VentasService>();
+
+// Consulta de RUC / cédula en el catastro público del SRI
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<SriService>(http =>
+{
+    http.BaseAddress = new Uri(SriService.UrlBase);
+    http.Timeout = TimeSpan.FromSeconds(10);
+    http.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (InventarioMariscos)");
+});
 
 var app = builder.Build();
 

@@ -30,6 +30,8 @@ public class ProductoConfiguration : IEntityTypeConfiguration<Producto>
         {
             t.HasCheckConstraint("CK_Productos_StockMinimo", "[StockMinimo] >= 0");
             t.HasCheckConstraint("CK_Productos_DiasVidaUtil", "[DiasVidaUtil] >= 0");
+            t.HasCheckConstraint("CK_Productos_PrecioVenta", "[PrecioVenta] >= 0");
+            t.HasCheckConstraint("CK_Productos_TarifaIva", "[TarifaIva] >= 0 AND [TarifaIva] <= 100");
             t.HasCheckConstraint("CK_Productos_RangoTemperatura",
                 "[TemperaturaMinima] IS NULL OR [TemperaturaMaxima] IS NULL OR [TemperaturaMinima] <= [TemperaturaMaxima]");
         });
@@ -43,6 +45,8 @@ public class ProductoConfiguration : IEntityTypeConfiguration<Producto>
         builder.Property(x => x.TemperaturaMinima).HasPrecision(5, 2);
         builder.Property(x => x.TemperaturaMaxima).HasPrecision(5, 2);
         builder.Property(x => x.StockMinimo).HasPrecision(18, 3);
+        builder.Property(x => x.PrecioVenta).HasPrecision(18, 4);
+        builder.Property(x => x.TarifaIva).HasPrecision(5, 2);
         builder.Property(x => x.FechaCreacion).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.HasIndex(x => x.Codigo).IsUnique();
 

@@ -22,7 +22,8 @@
                 <div class="row g-3">
                     <div class="col-md-3">
                         <label class="form-label">RUC / Cédula *</label>
-                        <InputText class="form-control" @bind-Value="edicion.Identificacion" maxlength="20" />
+                        <ConsultaSri Valor="@edicion.Identificacion" ValorChanged="v => edicion.Identificacion = v ?? string.Empty"
+                                     AlEncontrar="AplicarSri" />
                     </div>
                     <div class="col-md-5">
                         <label class="form-label">Razón social *</label>
@@ -109,6 +110,12 @@
         Email = p.Email, Direccion = p.Direccion, Activo = p.Activo
     };
 
+    private void AplicarSri(ResultadoSri r)
+    {
+        edicion!.RazonSocial = r.Nombre;
+        if (r.Direccion is not null) edicion.Direccion = r.Direccion;
+    }
+
     private async Task Guardar()
     {
         var p = edicion!;
@@ -117,6 +124,11 @@
         if (p.Identificacion.Length == 0 || p.RazonSocial.Length == 0)
         {
             (mensaje, tipoMensaje) = ("Identificación y razón social son obligatorias.", "danger");
+            return;
+        }
+        if (IdentificacionEcuador.ValidarCedulaORuc(p.Identificacion) is { } invalida)
+        {
+            (mensaje, tipoMensaje) = (invalida, "danger");
             return;
         }
 

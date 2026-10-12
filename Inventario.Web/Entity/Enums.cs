@@ -33,3 +33,45 @@ public enum TipoMovimiento
     Ajuste = 4,
     Merma = 5
 }
+
+public enum TipoIdentificacion
+{
+    Cedula = 1,
+    Ruc = 2,
+    Pasaporte = 3,
+    ConsumidorFinal = 4
+}
+
+public enum CondicionPago
+{
+    /// <summary>Se paga "de una": los pagos deben cubrir el total al registrar la venta.</summary>
+    Contado = 1,
+    /// <summary>"A cuenta": queda saldo por cobrar con abonos.</summary>
+    Credito = 2
+}
+
+public enum EstadoVenta
+{
+    Pendiente = 1,
+    Pagada = 2
+}
+
+public enum FormaPago
+{
+    Efectivo = 1,
+    Transferencia = 2,
+    Deposito = 3,
+    TarjetaCredito = 4,
+    TarjetaDebito = 5,
+    Cheque = 6
+}
+
+public enum MarcaTarjeta
+{
+    Visa = 1,
+    Mastercard = 2,
+    AmericanExpress = 3,
+    Diners = 4,
+    Discover = 5,
+    Otra = 6
+}

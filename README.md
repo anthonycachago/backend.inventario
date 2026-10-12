@@ -10,7 +10,8 @@ Sistema de inventario y localización para productos del mar (Blazor Server, .NE
 | Operación | Recepción (entrada por lote), Despacho FEFO, Movimientos (salida, transferencia, ajuste por conteo, merma), Registro de temperaturas |
 | Consultas | Existencias por ubicación, Lotes y trazabilidad, Kardex (por producto, tipo, fechas o lote), Mapa de bodega |
 | Localización | Bodegas (con coordenadas), Ubicaciones (zona / pasillo / rack / nivel, capacidad y temperatura objetivo) |
-| Catálogos | Productos, Categorías, Proveedores |
+| Ventas | Nueva venta (despacho FEFO + cobro), Ventas y cobros (abonos, anulación de pagos), Cuentas por cobrar por antigüedad, Clientes |
+| Catálogos | Productos (precio e IVA), Categorías, Proveedores |
 
 Modo claro / oscuro con el botón de la barra superior (se recuerda por navegador; por defecto sigue al sistema operativo).
 
@@ -24,6 +25,25 @@ Modo claro / oscuro con el botón de la barra superior (se recuerda por navegado
 - Merma y ajuste exigen motivo; una lectura de temperatura fuera de ±2 °C exige acción correctiva.
 - Concurrencia optimista sobre `Existencias` (RowVersion).
 - Restricciones CHECK en base de datos como segunda barrera (cantidades, fechas, coherencia origen/destino por tipo de movimiento).
+
+## Consulta SRI (`Services/Sri`)
+
+- Validación local de cédula (módulo 10) y RUC (natural, pública, sociedad) antes de guardar.
+- Botón **SRI** en clientes y proveedores: completa razón social y dirección de la matriz y avisa si el RUC no está
+  activo o si el contribuyente está marcado como empresa fantasma o con transacciones inexistentes.
+- Usa el catastro público de srienlinea.sri.gob.ec, que **no es una API documentada**. Si el SRI lo cambia o no
+  responde, la app muestra el aviso y los datos se ingresan a mano. Resultados en caché 12 h.
+
+## Ventas y cobros (`Services/VentasService.cs`)
+
+- **Contado** ("de una"): los pagos deben cubrir el total; se admite pago mixto (efectivo + tarjeta, etc.).
+- **Crédito** ("a cuenta"): requiere límite y días de crédito del cliente; bloquea si excede el límite o si tiene
+  facturas vencidas. Abonos posteriores desde el detalle de la venta.
+- **Tarjetas**: se cobran en el datáfono y se registra el voucher (marca, últimos 4 dígitos, autorización, lote,
+  cuotas). El sistema **nunca** guarda el número completo, la expiración ni el CVV (restricción CHECK en la base).
+- La venta despacha por FEFO en la misma transacción: si falta stock no se guarda nada. El kardex queda enlazado a la venta.
+- IVA por producto (0 % mariscos en estado natural, 15 % procesados). Consumidor final máximo $50 por venta.
+- Los pagos no se borran: se anulan con motivo y el monto vuelve al saldo.
 
 ## Base de datos
 
@@ -64,3 +84,6 @@ En `Development` la app aplica las migraciones pendientes al iniciar. En otros e
 ## Pendiente
 
 - Autenticación: los movimientos se atribuyen al usuario técnico `sistema` (`Services/DbInicializador.cs`). Identity ya está en el modelo; falta habilitar login y roles y usar el usuario autenticado.
+- Facturación electrónica SRI (XML firmado y autorización): las ventas registran los valores, pero no emiten comprobante.
+- Anulación de ventas con reingreso de stock.
+- Cobro en línea con pasarela (Payphone, Kushki, etc.): requiere contrato de comercio y credenciales.

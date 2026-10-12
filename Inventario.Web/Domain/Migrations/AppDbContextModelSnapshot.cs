@@ -22,6 +22,8 @@ namespace Inventario.Web.Domain.Migrations
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
 
+            modelBuilder.HasSequence("VentaNumero", "inv");
+
             modelBuilder.Entity("Inventario.Web.Entity.ApplicationUser", b =>
                 {
                     b.Property<string>("Id")
@@ -199,6 +201,64 @@ namespace Inventario.Web.Domain.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Inventario.Web.Entity.Cliente", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("DiasCredito")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Direccion")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<string>("Identificacion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<decimal>("LimiteCredito")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("RazonSocial")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("Telefono")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TipoIdentificacion")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Identificacion")
+                        .IsUnique();
+
+                    b.ToTable("Clientes", "inv", t =>
+                        {
+                            t.HasCheckConstraint("CK_Clientes_ConsumidorFinal", "[TipoIdentificacion] <> 'ConsumidorFinal' OR [LimiteCredito] = 0");
+
+                            t.HasCheckConstraint("CK_Clientes_Credito", "[LimiteCredito] >= 0 AND [DiasCredito] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Inventario.Web.Entity.Existencia", b =>
                 {
                     b.Property<int>("Id")
@@ -339,6 +399,9 @@ namespace Inventario.Web.Domain.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<int?>("VentaId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Fecha");
@@ -348,6 +411,8 @@ namespace Inventario.Web.Domain.Migrations
                     b.HasIndex("UbicacionOrigenId");
 
                     b.HasIndex("UsuarioId");
+
+                    b.HasIndex("VentaId");
 
                     b.HasIndex("LoteId", "Fecha");
 
@@ -426,6 +491,90 @@ namespace Inventario.Web.Domain.Migrations
                     b.ToView("vw_OcupacionUbicaciones", "inv");
                 });
 
+            modelBuilder.Entity("Inventario.Web.Entity.Pago", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Anulado")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Banco")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("Cuotas")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("FormaPago")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<decimal>("Monto")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("MotivoAnulacion")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("NumeroAutorizacion")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("NumeroLote")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Observacion")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<string>("Referencia")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("TarjetaMarca")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("TarjetaUltimos4")
+                        .HasMaxLength(4)
+                        .HasColumnType("nchar(4)")
+                        .IsFixedLength();
+
+                    b.Property<string>("UsuarioId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.Property<int>("VentaId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Fecha");
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("VentaId", "Anulado");
+
+                    b.ToTable("Pagos", "inv", t =>
+                        {
+                            t.HasCheckConstraint("CK_Pagos_Cuotas", "[Cuotas] IS NULL OR [Cuotas] BETWEEN 1 AND 48");
+
+                            t.HasCheckConstraint("CK_Pagos_Monto", "[Monto] > 0");
+
+                            t.HasCheckConstraint("CK_Pagos_Tarjeta", "[FormaPago] NOT IN ('TarjetaCredito', 'TarjetaDebito') OR ([TarjetaMarca] IS NOT NULL AND [TarjetaUltimos4] LIKE '[0-9][0-9][0-9][0-9]' AND [NumeroAutorizacion] IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Inventario.Web.Entity.Producto", b =>
                 {
                     b.Property<int>("Id")
@@ -467,6 +616,10 @@ namespace Inventario.Web.Domain.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<decimal>("PrecioVenta")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
                     b.Property<string>("Presentacion")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
@@ -474,6 +627,10 @@ namespace Inventario.Web.Domain.Migrations
                     b.Property<decimal>("StockMinimo")
                         .HasPrecision(18, 3)
                         .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("TarifaIva")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
 
                     b.Property<decimal?>("TemperaturaMaxima")
                         .HasPrecision(5, 2)
@@ -499,9 +656,13 @@ namespace Inventario.Web.Domain.Migrations
                         {
                             t.HasCheckConstraint("CK_Productos_DiasVidaUtil", "[DiasVidaUtil] >= 0");
 
+                            t.HasCheckConstraint("CK_Productos_PrecioVenta", "[PrecioVenta] >= 0");
+
                             t.HasCheckConstraint("CK_Productos_RangoTemperatura", "[TemperaturaMinima] IS NULL OR [TemperaturaMaxima] IS NULL OR [TemperaturaMinima] <= [TemperaturaMaxima]");
 
                             t.HasCheckConstraint("CK_Productos_StockMinimo", "[StockMinimo] >= 0");
+
+                            t.HasCheckConstraint("CK_Productos_TarifaIva", "[TarifaIva] >= 0 AND [TarifaIva] <= 100");
                         });
                 });
 
@@ -741,6 +902,140 @@ namespace Inventario.Web.Domain.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Inventario.Web.Entity.Venta", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("BodegaId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ClienteId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("CondicionPago")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<DateTime>("Fecha")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("FechaVencimiento")
+                        .HasColumnType("datetime2");
+
+                    b.Property<decimal>("Iva")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("Observacion")
+                        .HasMaxLength(250)
+                        .HasColumnType("nvarchar(250)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<decimal>("Saldo")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Subtotal0")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("SubtotalIva")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<string>("UsuarioId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BodegaId");
+
+                    b.HasIndex("Fecha");
+
+                    b.HasIndex("Numero")
+                        .IsUnique();
+
+                    b.HasIndex("UsuarioId");
+
+                    b.HasIndex("ClienteId", "Estado");
+
+                    b.ToTable("Ventas", "inv", t =>
+                        {
+                            t.HasCheckConstraint("CK_Ventas_Saldo", "[Saldo] >= 0 AND [Saldo] <= [Total]");
+
+                            t.HasCheckConstraint("CK_Ventas_Total", "[Total] = [Subtotal0] + [SubtotalIva] + [Iva]");
+
+                            t.HasCheckConstraint("CK_Ventas_Vencimiento", "([CondicionPago] = 'Contado' AND [FechaVencimiento] IS NULL) OR ([CondicionPago] = 'Credito' AND [FechaVencimiento] IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Inventario.Web.Entity.VentaDetalle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Cantidad")
+                        .HasPrecision(18, 3)
+                        .HasColumnType("decimal(18,3)");
+
+                    b.Property<decimal>("PrecioUnitario")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("decimal(18,4)");
+
+                    b.Property<int>("ProductoId")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<decimal>("TarifaIva")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("decimal(5,2)");
+
+                    b.Property<int>("VentaId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductoId");
+
+                    b.HasIndex("VentaId");
+
+                    b.ToTable("VentaDetalles", "inv", t =>
+                        {
+                            t.HasCheckConstraint("CK_VentaDetalles_Valores", "[Cantidad] > 0 AND [PrecioUnitario] >= 0 AND [TarifaIva] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>
                 {
                     b.Property<string>("Id")
@@ -935,6 +1230,11 @@ namespace Inventario.Web.Domain.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("Inventario.Web.Entity.Venta", "Venta")
+                        .WithMany("Movimientos")
+                        .HasForeignKey("VentaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Lote");
 
                     b.Navigation("UbicacionDestino");
@@ -942,6 +1242,27 @@ namespace Inventario.Web.Domain.Migrations
                     b.Navigation("UbicacionOrigen");
 
                     b.Navigation("Usuario");
+
+                    b.Navigation("Venta");
+                });
+
+            modelBuilder.Entity("Inventario.Web.Entity.Pago", b =>
+                {
+                    b.HasOne("Inventario.Web.Entity.ApplicationUser", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Inventario.Web.Entity.Venta", "Venta")
+                        .WithMany("Pagos")
+                        .HasForeignKey("VentaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+
+                    b.Navigation("Venta");
                 });
 
             modelBuilder.Entity("Inventario.Web.Entity.Producto", b =>
@@ -982,6 +1303,51 @@ namespace Inventario.Web.Domain.Migrations
                         .IsRequired();
 
                     b.Navigation("Bodega");
+                });
+
+            modelBuilder.Entity("Inventario.Web.Entity.Venta", b =>
+                {
+                    b.HasOne("Inventario.Web.Entity.Bodega", "Bodega")
+                        .WithMany()
+                        .HasForeignKey("BodegaId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Inventario.Web.Entity.Cliente", "Cliente")
+                        .WithMany("Ventas")
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Inventario.Web.Entity.ApplicationUser", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("UsuarioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Bodega");
+
+                    b.Navigation("Cliente");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("Inventario.Web.Entity.VentaDetalle", b =>
+                {
+                    b.HasOne("Inventario.Web.Entity.Producto", "Producto")
+                        .WithMany()
+                        .HasForeignKey("ProductoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Inventario.Web.Entity.Venta", "Venta")
+                        .WithMany("Detalles")
+                        .HasForeignKey("VentaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Producto");
+
+                    b.Navigation("Venta");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
@@ -1045,6 +1411,11 @@ namespace Inventario.Web.Domain.Migrations
                     b.Navigation("Productos");
                 });
 
+            modelBuilder.Entity("Inventario.Web.Entity.Cliente", b =>
+                {
+                    b.Navigation("Ventas");
+                });
+
             modelBuilder.Entity("Inventario.Web.Entity.Lote", b =>
                 {
                     b.Navigation("Existencias");
@@ -1067,6 +1438,15 @@ namespace Inventario.Web.Domain.Migrations
                     b.Navigation("Existencias");
 
                     b.Navigation("RegistrosTemperatura");
+                });
+
+            modelBuilder.Entity("Inventario.Web.Entity.Venta", b =>
+                {
+                    b.Navigation("Detalles");
+
+                    b.Navigation("Movimientos");
+
+                    b.Navigation("Pagos");
                 });
 #pragma warning restore 612, 618
         }

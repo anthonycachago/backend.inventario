@@ -62,4 +62,8 @@ public class MovimientoInventario
 
     public string UsuarioId { get; set; } = string.Empty;
     public ApplicationUser Usuario { get; set; } = null!;
+
+    /// <summary>Venta que originó la salida (null en movimientos internos).</summary>
+    public int? VentaId { get; set; }
+    public Venta? Venta { get; set; }
 }

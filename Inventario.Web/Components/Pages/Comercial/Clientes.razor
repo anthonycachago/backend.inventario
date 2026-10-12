@@ -1,0 +1,203 @@
+@page "/ventas/clientes"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Clientes</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-person-vcard"></i> Clientes</h1>
+    <div class="d-flex gap-2">
+        <input class="form-control" placeholder="Buscar identificación o nombre…" @bind="filtro" @bind:event="oninput" />
+        <button class="btn btn-primary text-nowrap" @onclick="Nuevo"><i class="bi bi-plus-lg"></i> Nuevo</button>
+    </div>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+@if (edicion is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">@(edicion.Id == 0 ? "Nuevo cliente" : "Editar cliente")</div>
+        <div class="card-body">
+            <EditForm Model="edicion" OnSubmit="Guardar">
+                <div class="row g-3">
+                    <div class="col-sm-4 col-lg-2">
+                        <label class="form-label">Tipo</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.TipoIdentificacion" @bind-Value:after="CambioTipo">
+                            @foreach (var t in Enum.GetValues<TipoIdentificacion>())
+                            {
+                                <option value="@t">@t.Nombre()</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-sm-8 col-lg-4">
+                        <label class="form-label">Identificación *</label>
+                        @if (edicion.TipoIdentificacion is TipoIdentificacion.Cedula or TipoIdentificacion.Ruc)
+                        {
+                            <ConsultaSri Valor="@edicion.Identificacion" ValorChanged="v => edicion.Identificacion = v ?? string.Empty"
+                                         AlEncontrar="AplicarSri" />
+                        }
+                        else
+                        {
+                            <InputText class="form-control" @bind-Value="edicion.Identificacion" maxlength="20"
+                                       readonly="@(edicion.TipoIdentificacion == TipoIdentificacion.ConsumidorFinal)" />
+                        }
+                    </div>
+                    <div class="col-lg-6">
+                        <label class="form-label">Nombre / razón social *</label>
+                        <InputText class="form-control" @bind-Value="edicion.RazonSocial" maxlength="300" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Teléfono</label>
+                        <InputText class="form-control" @bind-Value="edicion.Telefono" maxlength="20" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Email</label>
+                        <InputText type="email" class="form-control" @bind-Value="edicion.Email" maxlength="150" />
+                    </div>
+                    <div class="col-lg-6">
+                        <label class="form-label">Dirección</label>
+                        <InputText class="form-control" @bind-Value="edicion.Direccion" maxlength="300" />
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label">Límite de crédito ($)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.LimiteCredito" min="0" step="0.01"
+                                     disabled="@(edicion.TipoIdentificacion == TipoIdentificacion.ConsumidorFinal)" />
+                        <div class="form-text">0 = solo contado</div>
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label">Días de crédito</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.DiasCredito" min="0"
+                                     disabled="@(edicion.TipoIdentificacion == TipoIdentificacion.ConsumidorFinal)" />
+                    </div>
+                    <div class="col-lg-3 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <InputCheckbox class="form-check-input" id="cli-activo" @bind-Value="edicion.Activo" />
+                            <label class="form-check-label" for="cli-activo">Activo</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => edicion = null">Cancelar</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr><th>Identificación</th><th>Cliente</th><th>Contacto</th><th class="num">Crédito</th><th class="num">Saldo por cobrar</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var c in Filtrados)
+                {
+                    var saldo = saldos.GetValueOrDefault(c.Id);
+                    <tr>
+                        <td><span class="small text-body-secondary">@c.TipoIdentificacion.Nombre()</span><br /><code>@c.Identificacion</code></td>
+                        <td class="fw-semibold">@c.RazonSocial</td>
+                        <td class="small">@c.Telefono<br />@c.Email</td>
+                        <td class="num">@(c.LimiteCredito > 0 ? $"{c.LimiteCredito:C0} · {c.DiasCredito} d" : "Contado")</td>
+                        <td class="num @(saldo > 0 ? "fw-semibold" : "text-body-secondary")">@saldo.ToString("C2")</td>
+                        <td><span class="badge @(c.Activo ? "text-bg-success" : "text-bg-secondary")">@(c.Activo ? "Activo" : "Inactivo")</span></td>
+                        <td class="text-end text-nowrap">
+                            <a class="btn btn-sm btn-outline-secondary" title="Ventas del cliente" href="@($"ventas?cliente={c.Id}")"><i class="bi bi-receipt"></i></a>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(c)"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<Cliente> clientes = [];
+    private Dictionary<int, decimal> saldos = [];
+    private Cliente? edicion;
+    private string filtro = string.Empty;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private IEnumerable<Cliente> Filtrados => string.IsNullOrWhiteSpace(filtro)
+        ? clientes
+        : clientes.Where(c => c.Identificacion.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                           || c.RazonSocial.Contains(filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        clientes = await db.Clientes.AsNoTracking().OrderBy(c => c.RazonSocial).ToListAsync();
+        saldos = await db.Ventas.Where(v => v.Saldo > 0)
+            .GroupBy(v => v.ClienteId)
+            .Select(g => new { g.Key, Saldo = g.Sum(v => v.Saldo) })
+            .ToDictionaryAsync(x => x.Key, x => x.Saldo);
+    }
+
+    private void Nuevo() => edicion = new Cliente { TipoIdentificacion = TipoIdentificacion.Ruc };
+
+    private void Editar(Cliente c) => edicion = new Cliente
+    {
+        Id = c.Id, TipoIdentificacion = c.TipoIdentificacion, Identificacion = c.Identificacion, RazonSocial = c.RazonSocial,
+        Telefono = c.Telefono, Email = c.Email, Direccion = c.Direccion, LimiteCredito = c.LimiteCredito,
+        DiasCredito = c.DiasCredito, Activo = c.Activo
+    };
+
+    private void CambioTipo()
+    {
+        if (edicion!.TipoIdentificacion == TipoIdentificacion.ConsumidorFinal)
+        {
+            edicion.Identificacion = IdentificacionEcuador.ConsumidorFinal;
+            edicion.RazonSocial = "CONSUMIDOR FINAL";
+            edicion.LimiteCredito = 0;
+            edicion.DiasCredito = 0;
+        }
+        else if (edicion.Identificacion == IdentificacionEcuador.ConsumidorFinal)
+        {
+            edicion.Identificacion = string.Empty;
+        }
+    }
+
+    private void AplicarSri(ResultadoSri r)
+    {
+        edicion!.TipoIdentificacion = r.Tipo;
+        edicion.RazonSocial = r.Nombre;
+        if (r.Direccion is not null) edicion.Direccion = r.Direccion;
+        if (!r.Activo)
+            (mensaje, tipoMensaje) = ($"Atención: el RUC está {r.Estado} en el SRI.", "warning");
+    }
+
+    private async Task Guardar()
+    {
+        var c = edicion!;
+        c.Identificacion = c.Identificacion.Trim();
+        c.RazonSocial = c.RazonSocial.Trim();
+
+        var error = IdentificacionEcuador.Validar(c.TipoIdentificacion, c.Identificacion);
+        if (error is null && c.RazonSocial.Length == 0) error = "El nombre o razón social es obligatorio.";
+        if (error is null && (c.LimiteCredito < 0 || c.DiasCredito < 0)) error = "El crédito no puede ser negativo.";
+        if (error is null && (c.LimiteCredito > 0) != (c.DiasCredito > 0)) error = "Para dar crédito indique límite y días; para solo contado deje ambos en 0.";
+        if (error is not null)
+        {
+            (mensaje, tipoMensaje) = (error, "danger");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Clientes.AnyAsync(x => x.Identificacion == c.Identificacion && x.Id != c.Id))
+        {
+            (mensaje, tipoMensaje) = ($"Ya existe un cliente con identificación {c.Identificacion}.", "danger");
+            return;
+        }
+
+        db.Update(c);
+        await db.SaveChangesAsync();
+        (mensaje, tipoMensaje) = ("Cliente guardado.", "success");
+        edicion = null;
+        await CargarAsync();
+    }
+}

@@ -169,38 +169,53 @@ public class InventarioService(IDbContextFactory<AppDbContext> dbFactory)
         if (m.Cantidad <= 0) throw new ReglaNegocioException("La cantidad debe ser mayor a 0.");
 
         await using var db = await dbFactory.CreateDbContextAsync();
-        var hoy = DateTime.Today;
+        var consumos = await ConsumirFefoAsync(db, m.ProductoId, m.BodegaId, m.Cantidad, m.Referencia, m.Observacion);
+        await GuardarAsync(db);
+        return consumos;
+    }
 
-        var candidatos = await db.Existencias
-            .Include(e => e.Lote)
-            .Include(e => e.Ubicacion)
-            .Where(e => e.Lote.ProductoId == m.ProductoId
-                        && e.Cantidad > 0
-                        && e.Lote.FechaVencimiento >= hoy
-                        && e.Ubicacion.Activo
-                        && e.Ubicacion.Tipo != TipoUbicacion.Cuarentena
-                        && (m.BodegaId == null || e.Ubicacion.BodegaId == m.BodegaId))
+    /// <summary>
+    /// Agrega al contexto las salidas FEFO sin guardar, para que otra operación (p. ej. una venta)
+    /// las confirme en su misma transacción.
+    /// </summary>
+    internal static async Task<List<ConsumoFefo>> ConsumirFefoAsync(AppDbContext db, int productoId, int? bodegaId,
+        decimal cantidad, string? referencia, string? observacion, Venta? venta = null)
+    {
+        var hoy = DateTime.Today;
+        var candidatos = (await db.Existencias
+                .Include(e => e.Lote)
+                .Include(e => e.Ubicacion)
+                .Where(e => e.Lote.ProductoId == productoId
+                            && e.Cantidad > 0
+                            && e.Lote.FechaVencimiento >= hoy
+                            && e.Ubicacion.Activo
+                            && e.Ubicacion.Tipo != TipoUbicacion.Cuarentena
+                            && (bodegaId == null || e.Ubicacion.BodegaId == bodegaId))
+                .ToListAsync())
+            // Las ya consumidas en este mismo contexto vuelven con su valor en memoria
+            .Where(e => e.Cantidad > 0 && db.Entry(e).State != EntityState.Deleted)
             .OrderBy(e => e.Lote.FechaVencimiento)
             .ThenBy(e => e.Lote.FechaIngreso)
             .ThenBy(e => e.Cantidad)
-            .ToListAsync();
+            .ToList();
 
         var disponible = candidatos.Sum(e => e.Cantidad);
-        if (disponible < m.Cantidad)
-            throw new ReglaNegocioException($"Stock disponible insuficiente: hay {disponible:N3} y se solicitan {m.Cantidad:N3}.");
+        if (disponible < cantidad)
+        {
+            var nombre = await db.Productos.Where(p => p.Id == productoId).Select(p => p.Nombre).FirstOrDefaultAsync();
+            throw new ReglaNegocioException($"Stock disponible insuficiente de {nombre}: hay {disponible:N3} y se solicitan {cantidad:N3}.");
+        }
 
-        var pendiente = m.Cantidad;
+        var pendiente = cantidad;
         var consumos = new List<ConsumoFefo>();
         foreach (var e in candidatos)
         {
             if (pendiente == 0) break;
             var tomar = Math.Min(pendiente, e.Cantidad);
-            await AplicarAsync(db, e.Lote, e.UbicacionId, null, tomar, TipoMovimiento.Salida, m.Referencia, m.Observacion);
+            await AplicarAsync(db, e.Lote, e.UbicacionId, null, tomar, TipoMovimiento.Salida, referencia, observacion, venta);
             consumos.Add(new ConsumoFefo(e.Lote.Codigo, e.Ubicacion.Codigo, e.Lote.FechaVencimiento, tomar));
             pendiente -= tomar;
         }
-
-        await GuardarAsync(db);
         return consumos;
     }
 
@@ -229,7 +244,7 @@ public class InventarioService(IDbContextFactory<AppDbContext> dbFactory)
 
     /// <summary>Mueve stock entre ubicaciones (null = fuera del inventario) y agrega el movimiento al kardex.</summary>
     private static async Task AplicarAsync(AppDbContext db, Lote lote, int? origenId, int? destinoId, decimal cantidad,
-        TipoMovimiento tipo, string? referencia, string? observacion)
+        TipoMovimiento tipo, string? referencia, string? observacion, Venta? venta = null)
     {
         if (origenId is not null)
         {
@@ -269,7 +284,8 @@ public class InventarioService(IDbContextFactory<AppDbContext> dbFactory)
             UbicacionDestinoId = destinoId,
             Referencia = string.IsNullOrWhiteSpace(referencia) ? null : referencia.Trim(),
             Observacion = string.IsNullOrWhiteSpace(observacion) ? null : observacion.Trim(),
-            UsuarioId = UsuarioSistema.Id
+            UsuarioId = UsuarioSistema.Id,
+            Venta = venta
         });
     }
 
@@ -317,7 +333,7 @@ public class InventarioService(IDbContextFactory<AppDbContext> dbFactory)
         if (cantidad <= 0) throw new ReglaNegocioException("La cantidad debe ser mayor a 0.");
     }
 
-    private static async Task GuardarAsync(AppDbContext db)
+    internal static async Task GuardarAsync(AppDbContext db)
     {
         try
         {
@@ -325,7 +341,7 @@ public class InventarioService(IDbContextFactory<AppDbContext> dbFactory)
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new ReglaNegocioException("Otro usuario modificó este stock al mismo tiempo. Recargue e intente de nuevo.");
+            throw new ReglaNegocioException("Otro usuario modificó estos datos al mismo tiempo. Recargue e intente de nuevo.");
         }
         catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) == true)
         {

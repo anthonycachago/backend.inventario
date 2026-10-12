@@ -38,5 +38,17 @@ public static class DbInicializador
             });
             await db.SaveChangesAsync();
         }
+
+        // Cliente genérico para ventas pequeñas sin datos del comprador
+        if (!await db.Clientes.AnyAsync(c => c.Identificacion == Sri.IdentificacionEcuador.ConsumidorFinal))
+        {
+            db.Clientes.Add(new Cliente
+            {
+                TipoIdentificacion = TipoIdentificacion.ConsumidorFinal,
+                Identificacion = Sri.IdentificacionEcuador.ConsumidorFinal,
+                RazonSocial = "CONSUMIDOR FINAL"
+            });
+            await db.SaveChangesAsync();
+        }
     }
 }

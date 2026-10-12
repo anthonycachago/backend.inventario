@@ -43,6 +43,44 @@ public static class Textos
         _ => "text-bg-secondary"
     };
 
+    public static string Nombre(this FormaPago forma) => forma switch
+    {
+        FormaPago.Efectivo => "Efectivo",
+        FormaPago.Transferencia => "Transferencia",
+        FormaPago.Deposito => "Depósito",
+        FormaPago.TarjetaCredito => "Tarjeta de crédito",
+        FormaPago.TarjetaDebito => "Tarjeta de débito",
+        FormaPago.Cheque => "Cheque",
+        _ => forma.ToString()
+    };
+
+    public static string Icono(this FormaPago forma) => forma switch
+    {
+        FormaPago.Efectivo => "bi-cash-coin",
+        FormaPago.Transferencia or FormaPago.Deposito => "bi-bank",
+        FormaPago.TarjetaCredito or FormaPago.TarjetaDebito => "bi-credit-card",
+        FormaPago.Cheque => "bi-receipt",
+        _ => "bi-wallet2"
+    };
+
+    public static string Nombre(this MarcaTarjeta marca) => marca switch
+    {
+        MarcaTarjeta.AmericanExpress => "American Express",
+        _ => marca.ToString()
+    };
+
+    public static string Nombre(this TipoIdentificacion tipo) => tipo switch
+    {
+        TipoIdentificacion.Cedula => "Cédula",
+        TipoIdentificacion.Ruc => "RUC",
+        TipoIdentificacion.Pasaporte => "Pasaporte",
+        TipoIdentificacion.ConsumidorFinal => "Consumidor final",
+        _ => tipo.ToString()
+    };
+
+    public static string Nombre(this CondicionPago condicion) =>
+        condicion == CondicionPago.Contado ? "Contado" : "Crédito";
+
     public static string ClaseBadge(this TipoUbicacion tipo) => tipo switch
     {
         TipoUbicacion.CamaraCongelacion => "text-bg-primary",

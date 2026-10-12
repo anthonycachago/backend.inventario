@@ -689,3 +689,273 @@ END;
 COMMIT;
 GO
 
+BEGIN TRANSACTION;
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE SEQUENCE [inv].[VentaNumero] START WITH 1 INCREMENT BY 1 NO CYCLE;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    ALTER TABLE [inv].[Productos] ADD [PrecioVenta] decimal(18,4) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    ALTER TABLE [inv].[Productos] ADD [TarifaIva] decimal(5,2) NOT NULL DEFAULT 0.0;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    ALTER TABLE [inv].[MovimientosInventario] ADD [VentaId] int NULL;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE TABLE [inv].[Clientes] (
+        [Id] int NOT NULL IDENTITY,
+        [TipoIdentificacion] nvarchar(20) NOT NULL,
+        [Identificacion] nvarchar(20) NOT NULL,
+        [RazonSocial] nvarchar(300) NOT NULL,
+        [Telefono] nvarchar(20) NULL,
+        [Email] nvarchar(150) NULL,
+        [Direccion] nvarchar(300) NULL,
+        [LimiteCredito] decimal(18,2) NOT NULL,
+        [DiasCredito] int NOT NULL,
+        [Activo] bit NOT NULL,
+        CONSTRAINT [PK_Clientes] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_Clientes_ConsumidorFinal] CHECK ([TipoIdentificacion] <> 'ConsumidorFinal' OR [LimiteCredito] = 0),
+        CONSTRAINT [CK_Clientes_Credito] CHECK ([LimiteCredito] >= 0 AND [DiasCredito] >= 0)
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE TABLE [inv].[Ventas] (
+        [Id] int NOT NULL IDENTITY,
+        [Numero] nvarchar(20) NOT NULL,
+        [Fecha] datetime2 NOT NULL,
+        [CondicionPago] nvarchar(20) NOT NULL,
+        [FechaVencimiento] datetime2 NULL,
+        [Subtotal0] decimal(18,2) NOT NULL,
+        [SubtotalIva] decimal(18,2) NOT NULL,
+        [Iva] decimal(18,2) NOT NULL,
+        [Total] decimal(18,2) NOT NULL,
+        [Saldo] decimal(18,2) NOT NULL,
+        [Estado] nvarchar(20) NOT NULL,
+        [Observacion] nvarchar(250) NULL,
+        [RowVersion] rowversion NOT NULL,
+        [ClienteId] int NOT NULL,
+        [BodegaId] int NULL,
+        [UsuarioId] nvarchar(450) NOT NULL,
+        CONSTRAINT [PK_Ventas] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_Ventas_Saldo] CHECK ([Saldo] >= 0 AND [Saldo] <= [Total]),
+        CONSTRAINT [CK_Ventas_Total] CHECK ([Total] = [Subtotal0] + [SubtotalIva] + [Iva]),
+        CONSTRAINT [CK_Ventas_Vencimiento] CHECK (([CondicionPago] = 'Contado' AND [FechaVencimiento] IS NULL) OR ([CondicionPago] = 'Credito' AND [FechaVencimiento] IS NOT NULL)),
+        CONSTRAINT [FK_Ventas_AspNetUsers_UsuarioId] FOREIGN KEY ([UsuarioId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Ventas_Bodegas_BodegaId] FOREIGN KEY ([BodegaId]) REFERENCES [inv].[Bodegas] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Ventas_Clientes_ClienteId] FOREIGN KEY ([ClienteId]) REFERENCES [inv].[Clientes] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE TABLE [inv].[Pagos] (
+        [Id] int NOT NULL IDENTITY,
+        [Fecha] datetime2 NOT NULL,
+        [Monto] decimal(18,2) NOT NULL,
+        [FormaPago] nvarchar(20) NOT NULL,
+        [Referencia] nvarchar(50) NULL,
+        [Banco] nvarchar(100) NULL,
+        [TarjetaMarca] nvarchar(20) NULL,
+        [TarjetaUltimos4] nchar(4) NULL,
+        [NumeroLote] nvarchar(20) NULL,
+        [NumeroAutorizacion] nvarchar(20) NULL,
+        [Cuotas] int NULL,
+        [Observacion] nvarchar(250) NULL,
+        [Anulado] bit NOT NULL,
+        [MotivoAnulacion] nvarchar(250) NULL,
+        [VentaId] int NOT NULL,
+        [UsuarioId] nvarchar(450) NOT NULL,
+        CONSTRAINT [PK_Pagos] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_Pagos_Cuotas] CHECK ([Cuotas] IS NULL OR [Cuotas] BETWEEN 1 AND 48),
+        CONSTRAINT [CK_Pagos_Monto] CHECK ([Monto] > 0),
+        CONSTRAINT [CK_Pagos_Tarjeta] CHECK ([FormaPago] NOT IN ('TarjetaCredito', 'TarjetaDebito') OR ([TarjetaMarca] IS NOT NULL AND [TarjetaUltimos4] LIKE '[0-9][0-9][0-9][0-9]' AND [NumeroAutorizacion] IS NOT NULL)),
+        CONSTRAINT [FK_Pagos_AspNetUsers_UsuarioId] FOREIGN KEY ([UsuarioId]) REFERENCES [AspNetUsers] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Pagos_Ventas_VentaId] FOREIGN KEY ([VentaId]) REFERENCES [inv].[Ventas] ([Id]) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE TABLE [inv].[VentaDetalles] (
+        [Id] int NOT NULL IDENTITY,
+        [Cantidad] decimal(18,3) NOT NULL,
+        [PrecioUnitario] decimal(18,4) NOT NULL,
+        [TarifaIva] decimal(5,2) NOT NULL,
+        [Subtotal] decimal(18,2) NOT NULL,
+        [VentaId] int NOT NULL,
+        [ProductoId] int NOT NULL,
+        CONSTRAINT [PK_VentaDetalles] PRIMARY KEY ([Id]),
+        CONSTRAINT [CK_VentaDetalles_Valores] CHECK ([Cantidad] > 0 AND [PrecioUnitario] >= 0 AND [TarifaIva] >= 0),
+        CONSTRAINT [FK_VentaDetalles_Productos_ProductoId] FOREIGN KEY ([ProductoId]) REFERENCES [inv].[Productos] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_VentaDetalles_Ventas_VentaId] FOREIGN KEY ([VentaId]) REFERENCES [inv].[Ventas] ([Id]) ON DELETE CASCADE
+    );
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    EXEC(N'ALTER TABLE [inv].[Productos] ADD CONSTRAINT [CK_Productos_PrecioVenta] CHECK ([PrecioVenta] >= 0)');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    EXEC(N'ALTER TABLE [inv].[Productos] ADD CONSTRAINT [CK_Productos_TarifaIva] CHECK ([TarifaIva] >= 0 AND [TarifaIva] <= 100)');
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_MovimientosInventario_VentaId] ON [inv].[MovimientosInventario] ([VentaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Clientes_Identificacion] ON [inv].[Clientes] ([Identificacion]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Pagos_Fecha] ON [inv].[Pagos] ([Fecha]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Pagos_UsuarioId] ON [inv].[Pagos] ([UsuarioId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Pagos_VentaId_Anulado] ON [inv].[Pagos] ([VentaId], [Anulado]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_VentaDetalles_ProductoId] ON [inv].[VentaDetalles] ([ProductoId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_VentaDetalles_VentaId] ON [inv].[VentaDetalles] ([VentaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Ventas_BodegaId] ON [inv].[Ventas] ([BodegaId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Ventas_ClienteId_Estado] ON [inv].[Ventas] ([ClienteId], [Estado]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Ventas_Fecha] ON [inv].[Ventas] ([Fecha]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE UNIQUE INDEX [IX_Ventas_Numero] ON [inv].[Ventas] ([Numero]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    CREATE INDEX [IX_Ventas_UsuarioId] ON [inv].[Ventas] ([UsuarioId]);
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    ALTER TABLE [inv].[MovimientosInventario] ADD CONSTRAINT [FK_MovimientosInventario_Ventas_VentaId] FOREIGN KEY ([VentaId]) REFERENCES [inv].[Ventas] ([Id]) ON DELETE NO ACTION;
+END;
+
+IF NOT EXISTS (
+    SELECT * FROM [__EFMigrationsHistory]
+    WHERE [MigrationId] = N'20261012005528_ClientesVentasPagos'
+)
+BEGIN
+    INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+    VALUES (N'20261012005528_ClientesVentasPagos', N'10.0.12');
+END;
+
+COMMIT;
+GO
+

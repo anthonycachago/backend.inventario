@@ -80,6 +80,18 @@
                         <label class="form-label">Stock mínimo</label>
                         <InputNumber class="form-control" @bind-Value="edicion.StockMinimo" min="0" step="0.001" />
                     </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Precio de venta ($)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.PrecioVenta" min="0" step="0.01" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">IVA</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.TarifaIva">
+                            <option value="0">0 % (natural, fresco/congelado)</option>
+                            <option value="15">15 % (procesado)</option>
+                            <option value="5">5 %</option>
+                        </InputSelect>
+                    </div>
                     <div class="col-lg-2 d-flex align-items-end">
                         <div class="form-check form-switch mb-2">
                             <InputCheckbox class="form-check-input" id="prod-activo" @bind-Value="edicion.Activo" />
@@ -102,7 +114,7 @@
             <thead>
                 <tr>
                     <th>Código</th><th>Producto</th><th>Categoría</th><th>Conservación</th>
-                    <th class="num">Rango °C</th><th class="num">Vida útil</th><th class="num">Stock mín.</th><th>Estado</th><th></th>
+                    <th class="num">Rango °C</th><th class="num">Vida útil</th><th class="num">Stock mín.</th><th class="num">Precio</th><th>Estado</th><th></th>
                 </tr>
             </thead>
             <tbody>
@@ -119,6 +131,7 @@
                         <td class="num">@p.TemperaturaMinima?.ToString("N1") – @p.TemperaturaMaxima?.ToString("N1")</td>
                         <td class="num">@p.DiasVidaUtil d</td>
                         <td class="num">@p.StockMinimo.ToString("N3") @p.UnidadMedida.Abreviatura()</td>
+                        <td class="num">@p.PrecioVenta.ToString("C2") <span class="small text-body-secondary">IVA @p.TarifaIva.ToString("0")%</span></td>
                         <td><span class="badge @(p.Activo ? "text-bg-success" : "text-bg-secondary")">@(p.Activo ? "Activo" : "Inactivo")</span></td>
                         <td class="text-end">
                             <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(p)"><i class="bi bi-pencil"></i></button>
@@ -163,7 +176,9 @@
         Id = p.Id, Codigo = p.Codigo, Nombre = p.Nombre, NombreCientifico = p.NombreCientifico, Presentacion = p.Presentacion,
         UnidadMedida = p.UnidadMedida, EstadoConservacion = p.EstadoConservacion, TemperaturaMinima = p.TemperaturaMinima,
         TemperaturaMaxima = p.TemperaturaMaxima, DiasVidaUtil = p.DiasVidaUtil, StockMinimo = p.StockMinimo,
-        Activo = p.Activo, FechaCreacion = p.FechaCreacion, CategoriaId = p.CategoriaId
+        Activo = p.Activo, FechaCreacion = p.FechaCreacion, CategoriaId = p.CategoriaId,
+        // Round quita la escala (15.00 -> 15) para que el select encuentre la opción
+        PrecioVenta = p.PrecioVenta, TarifaIva = decimal.Round(p.TarifaIva, 0)
     };
 
     private async Task Guardar()
