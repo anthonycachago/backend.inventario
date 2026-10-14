@@ -1,0 +1,107 @@
+@page "/ventas"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Ventas</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-receipt"></i> Ventas</h1>
+    <a class="btn btn-success" href="ventas/nueva"><i class="bi bi-cart-plus"></i> Nueva venta</a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body row g-2 align-items-end">
+        <div class="col-sm-6 col-lg-4">
+            <label class="form-label small">Cliente</label>
+            <select class="form-select" @bind="Cliente" @bind:after="CargarAsync">
+                <option value="">Todos</option>
+                @foreach (var c in clientes)
+                {
+                    <option value="@c.Id">@c.RazonSocial</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <label class="form-label small">Estado</label>
+            <select class="form-select" @bind="estado" @bind:after="CargarAsync">
+                <option value="">Todos</option>
+                <option value="@EstadoVenta.Pendiente">Por cobrar</option>
+                <option value="@EstadoVenta.Pagada">Pagadas</option>
+            </select>
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small">Desde</label>
+            <input type="date" class="form-control" @bind="desde" @bind:after="CargarAsync" />
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small">Hasta</label>
+            <input type="date" class="form-control" @bind="hasta" @bind:after="CargarAsync" />
+        </div>
+        <div class="col-lg-2 small">
+            <div>Vendido: <strong>@ventas.Sum(v => v.Total).ToString("C2")</strong></div>
+            <div>Por cobrar: <strong>@ventas.Sum(v => v.Saldo).ToString("C2")</strong></div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr><th>Número</th><th>Fecha</th><th>Cliente</th><th>Condición</th><th class="num">Total</th><th class="num">Saldo</th><th>Estado</th></tr>
+            </thead>
+            <tbody>
+                @foreach (var v in ventas)
+                {
+                    <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"ventas/{v.Id}"))">
+                        <td><a href="@($"ventas/{v.Id}")"><code>@v.Numero</code></a></td>
+                        <td class="text-nowrap">@v.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                        <td>@v.Cliente.RazonSocial</td>
+                        <td>@v.CondicionPago.Nombre()</td>
+                        <td class="num">@v.Total.ToString("C2")</td>
+                        <td class="num fw-semibold">@(v.Saldo > 0 ? v.Saldo.ToString("C2") : "—")</td>
+                        <td><EstadoCobro Venta="v" /></td>
+                    </tr>
+                }
+                @if (ventas.Count == 0)
+                {
+                    <tr><td colspan="7" class="text-center text-body-secondary py-4">Sin ventas para los filtros seleccionados.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    [SupplyParameterFromQuery(Name = "cliente")]
+    public int? Cliente { get; set; }
+
+    private List<Cliente> clientes = [];
+    private List<Venta> ventas = [];
+    private EstadoVenta? estado;
+    private DateTime? desde = DateTime.Today.AddDays(-30);
+    private DateTime? hasta = DateTime.Today;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        clientes = await db.Clientes.AsNoTracking().OrderBy(c => c.RazonSocial).ToListAsync();
+        if (Cliente is not null) desde = null; // historial completo del cliente
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var hastaExclusivo = hasta?.Date.AddDays(1);
+        ventas = await db.Ventas.AsNoTracking().Include(v => v.Cliente)
+            .Where(v => Cliente == null || v.ClienteId == Cliente)
+            .Where(v => estado == null || v.Estado == estado)
+            .Where(v => desde == null || v.Fecha >= desde)
+            .Where(v => hastaExclusivo == null || v.Fecha < hastaExclusivo)
+            .OrderByDescending(v => v.Fecha)
+            .Take(500)
+            .ToListAsync();
+    }
+}

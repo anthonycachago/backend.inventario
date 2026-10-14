@@ -1,0 +1,155 @@
+@page "/localizacion/temperaturas"
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject InventarioService Inventario
+
+<PageTitle>Temperaturas</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-thermometer-snow"></i> Control de cadena de frío</h1>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header fw-semibold">Registrar lectura</div>
+            <div class="card-body">
+                <EditForm Model="this" OnSubmit="Registrar">
+                    <div class="mb-3">
+                        <label class="form-label">Ubicación *</label>
+                        <select class="form-select" @bind="ubicacionId">
+                            <option value="0">— Seleccione —</option>
+                            @foreach (var g in ubicaciones.GroupBy(u => u.Bodega.Codigo))
+                            {
+                                <optgroup label="@g.Key">
+                                    @foreach (var u in g)
+                                    {
+                                        <option value="@u.Id">@u.Codigo (obj. @(u.TemperaturaObjetivo?.ToString("N1") ?? "–") °C)</option>
+                                    }
+                                </optgroup>
+                            }
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Temperatura (°C) *</label>
+                        <input type="number" step="0.1" class="form-control" @bind="temperatura" />
+                        @if (Objetivo is not null && temperatura is not null)
+                        {
+                            var fuera = ReglasInventario.TemperaturaFueraDeRango(Objetivo, temperatura);
+                            <div class="form-text @(fuera ? "text-danger fw-semibold" : "text-success")">
+                                @(fuera ? $"Fuera de rango (objetivo {Objetivo:N1} ± {ReglasInventario.ToleranciaTemperatura} °C)" : "Dentro del rango")
+                            </div>
+                        }
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Observación / acción correctiva</label>
+                        <textarea class="form-control" rows="2" maxlength="250" @bind="observacion"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-save"></i> Registrar</button>
+                </EditForm>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex flex-wrap gap-2 align-items-center">
+                <span class="fw-semibold me-auto">Últimas lecturas</span>
+                <div class="form-check form-switch m-0">
+                    <input class="form-check-input" type="checkbox" id="solo-alertas" @bind="soloAlertas" @bind:after="CargarAsync" />
+                    <label class="form-check-label" for="solo-alertas">Solo fuera de rango</label>
+                </div>
+            </div>
+            <div class="table-responsive tabla-scroll">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr><th>Fecha</th><th>Ubicación</th><th class="num">Lectura</th><th class="num">Objetivo</th><th>Observación</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var r in registros)
+                        {
+                            var fuera = ReglasInventario.TemperaturaFueraDeRango(r.Ubicacion.TemperaturaObjetivo, r.Temperatura);
+                            <tr class="@(fuera ? "table-danger" : "")">
+                                <td class="text-nowrap">@r.FechaHora.ToString("dd/MM/yyyy HH:mm")</td>
+                                <td>@r.Ubicacion.Bodega.Codigo · <code>@r.Ubicacion.Codigo</code></td>
+                                <td class="num fw-semibold">@r.Temperatura.ToString("N1") °C</td>
+                                <td class="num">@r.Ubicacion.TemperaturaObjetivo?.ToString("N1")</td>
+                                <td class="small">@r.Observacion</td>
+                            </tr>
+                        }
+                        @if (registros.Count == 0)
+                        {
+                            <tr><td colspan="5" class="text-center text-body-secondary py-4">Sin lecturas.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Ubicacion> ubicaciones = [];
+    private List<RegistroTemperatura> registros = [];
+    private int ubicacionId;
+    private decimal? temperatura;
+    private string? observacion;
+    private bool soloAlertas;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private decimal? Objetivo => ubicaciones.FirstOrDefault(u => u.Id == ubicacionId)?.TemperaturaObjetivo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        ubicaciones = await db.Ubicaciones.AsNoTracking().Include(u => u.Bodega)
+            .Where(u => u.Activo && u.Tipo != TipoUbicacion.AreaSeca)
+            .OrderBy(u => u.Bodega.Codigo).ThenBy(u => u.Codigo)
+            .ToListAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var consulta = db.RegistrosTemperatura.AsNoTracking()
+            .Include(r => r.Ubicacion).ThenInclude(u => u.Bodega)
+            .OrderByDescending(r => r.FechaHora)
+            .AsQueryable();
+
+        if (soloAlertas)
+        {
+            var tol = ReglasInventario.ToleranciaTemperatura;
+            consulta = consulta.Where(r => r.Ubicacion.TemperaturaObjetivo != null
+                && (r.Temperatura > r.Ubicacion.TemperaturaObjetivo + tol || r.Temperatura < r.Ubicacion.TemperaturaObjetivo - tol));
+        }
+
+        registros = await consulta.Take(200).ToListAsync();
+    }
+
+    private async Task Registrar()
+    {
+        if (ubicacionId == 0 || temperatura is null)
+        {
+            (mensaje, tipoMensaje) = ("Seleccione la ubicación e ingrese la temperatura.", "danger");
+            return;
+        }
+
+        try
+        {
+            var fuera = await Inventario.RegistrarTemperaturaAsync(ubicacionId, temperatura.Value, observacion);
+            (mensaje, tipoMensaje) = fuera
+                ? ("Lectura registrada FUERA DE RANGO. Revise el producto almacenado en esa ubicación.", "warning")
+                : ("Lectura registrada.", "success");
+            temperatura = null;
+            observacion = null;
+            await CargarAsync();
+        }
+        catch (ReglaNegocioException ex)
+        {
+            (mensaje, tipoMensaje) = (ex.Message, "danger");
+        }
+    }
+}

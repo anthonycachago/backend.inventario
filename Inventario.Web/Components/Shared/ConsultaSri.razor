@@ -1,0 +1,88 @@
+@* Campo de identificación con botón para consultar el catastro del SRI y autocompletar el formulario. *@
+@inject SriService Sri
+
+<div class="input-group">
+    <input class="form-control" value="@Valor" maxlength="20" inputmode="numeric" placeholder="Cédula o RUC"
+           @onchange="CambiarAsync" @onkeydown="TeclaAsync" />
+    <button type="button" class="btn btn-outline-primary text-nowrap" @onclick="ConsultarAsync" disabled="@consultando"
+            title="Consultar en el SRI">
+        @if (consultando)
+        {
+            <span class="spinner-border spinner-border-sm" aria-hidden="true"></span>
+        }
+        else
+        {
+            <i class="bi bi-search"></i>
+        }
+        SRI
+    </button>
+</div>
+
+@if (error is not null)
+{
+    <div class="form-text text-danger"><i class="bi bi-exclamation-circle"></i> @error</div>
+}
+@if (resultado is not null)
+{
+    <div class="form-text">
+        <span class="badge @(resultado.Activo ? "text-bg-success" : "text-bg-danger")">@(resultado.Estado ?? "Registrado")</span>
+        @resultado.TipoContribuyente @(resultado.Regimen is null ? "" : $"· {resultado.Regimen}")
+        @if (resultado.Actividad is not null)
+        {
+            <div class="text-truncate" title="@resultado.Actividad">@resultado.Actividad</div>
+        }
+        @foreach (var alerta in resultado.Alertas)
+        {
+            var grave = alerta.Contains("FANTASMA") || alerta.Contains("INEXISTENTES") || alerta.StartsWith("RUC en estado");
+            <div class="@(grave ? "text-danger fw-semibold" : "")"><i class="bi @(grave ? "bi-exclamation-triangle-fill" : "bi-info-circle")"></i> @alerta</div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public string? Valor { get; set; }
+    [Parameter] public EventCallback<string?> ValorChanged { get; set; }
+    /// <summary>Se invoca con los datos del SRI para que el formulario los copie.</summary>
+    [Parameter] public EventCallback<ResultadoSri> AlEncontrar { get; set; }
+
+    private bool consultando;
+    private string? error;
+    private ResultadoSri? resultado;
+
+    private async Task CambiarAsync(ChangeEventArgs e)
+    {
+        Valor = e.Value?.ToString()?.Trim();
+        resultado = null;
+        error = null;
+        await ValorChanged.InvokeAsync(Valor);
+    }
+
+    private async Task TeclaAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await ConsultarAsync();
+    }
+
+    private async Task ConsultarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Valor)) return;
+        consultando = true;
+        error = null;
+        resultado = null;
+        try
+        {
+            resultado = await Sri.ConsultarAsync(Valor);
+            if (resultado is null)
+                error = "El SRI no tiene registros para esta identificación.";
+            else
+                await AlEncontrar.InvokeAsync(resultado);
+        }
+        catch (Exception ex) when (ex is ReglaNegocioException or SriNoDisponibleException)
+        {
+            error = ex.Message;
+        }
+        finally
+        {
+            consultando = false;
+        }
+    }
+}

@@ -1,0 +1,225 @@
+@page "/inventario/movimientos"
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject InventarioService Inventario
+
+<PageTitle>Movimientos</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-arrow-left-right"></i> Movimientos de inventario</h1>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+<div class="btn-group mb-3 flex-wrap" role="group" aria-label="Tipo de movimiento">
+    @foreach (var t in tipos)
+    {
+        <input type="radio" class="btn-check" name="tipo" id="tipo-@t" checked="@(modelo.Tipo == t)" @onchange="() => modelo.Tipo = t" />
+        <label class="btn btn-outline-primary" for="tipo-@t"><i class="bi @Icono(t)"></i> @t.Nombre()</label>
+    }
+</div>
+<p class="text-body-secondary small">@Ayuda</p>
+
+<div class="row g-3">
+    <div class="col-xl-7">
+        <div class="card h-100">
+            <div class="card-header d-flex gap-2 align-items-center">
+                <span class="fw-semibold me-auto">1. Seleccione el stock de origen</span>
+                <input class="form-control form-control-sm w-auto" placeholder="Producto, lote o ubicación…" @bind="filtro" @bind:event="oninput" />
+            </div>
+            <div class="table-responsive tabla-scroll">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead>
+                        <tr><th>Producto</th><th>Lote</th><th>Ubicación</th><th class="num">Cantidad</th><th>Vence</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var s in StockFiltrado)
+                        {
+                            <tr class="@(s.ExistenciaId == seleccion?.ExistenciaId ? "table-primary" : "")" style="cursor:pointer" @onclick="() => Seleccionar(s)">
+                                <td>@s.Producto</td>
+                                <td><code>@s.Lote</code></td>
+                                <td>@s.Bodega · @s.Ubicacion</td>
+                                <td class="num">@s.Cantidad.ToString("N3") @Textos.Abreviatura(s.UnidadMedida)</td>
+                                <td><EstadoVencimiento Dias="s.DiasParaVencer" /></td>
+                            </tr>
+                        }
+                        @if (!StockFiltrado.Any())
+                        {
+                            <tr><td colspan="5" class="text-center text-body-secondary py-4">Sin existencias.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-5">
+        <div class="card h-100">
+            <div class="card-header fw-semibold">2. Detalle del movimiento</div>
+            <div class="card-body">
+                @if (seleccion is null)
+                {
+                    <p class="text-body-secondary">Seleccione una fila de la tabla.</p>
+                }
+                else
+                {
+                    <dl class="row small mb-3">
+                        <dt class="col-4">Producto</dt><dd class="col-8">@seleccion.Producto</dd>
+                        <dt class="col-4">Lote</dt><dd class="col-8"><code>@seleccion.Lote</code> · vence @seleccion.FechaVencimiento.ToString("dd/MM/yyyy")</dd>
+                        <dt class="col-4">Origen</dt><dd class="col-8">@seleccion.Bodega · @seleccion.Ubicacion</dd>
+                        <dt class="col-4">Disponible</dt><dd class="col-8 fw-semibold">@seleccion.Cantidad.ToString("N3") @Textos.Abreviatura(seleccion.UnidadMedida)</dd>
+                    </dl>
+
+                    <EditForm Model="modelo" OnSubmit="Registrar">
+                        @if (modelo.Tipo == TipoMovimiento.Transferencia)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label">Ubicación destino *</label>
+                                <InputSelect class="form-select" @bind-Value="modelo.UbicacionDestinoId">
+                                    <option value="0">— Seleccione —</option>
+                                    @foreach (var g in Destinos.GroupBy(u => u.Bodega.Codigo))
+                                    {
+                                        <optgroup label="@g.Key">
+                                            @foreach (var u in g)
+                                            {
+                                                <option value="@u.Id">@u.Codigo · @u.Tipo.Nombre()</option>
+                                            }
+                                        </optgroup>
+                                    }
+                                </InputSelect>
+                            </div>
+                        }
+                        <div class="mb-3">
+                            <label class="form-label">
+                                @(modelo.Tipo == TipoMovimiento.Ajuste ? "Cantidad contada físicamente *" : "Cantidad *")
+                            </label>
+                            <div class="input-group">
+                                <InputNumber class="form-control" @bind-Value="modelo.Cantidad" step="0.001" min="0" />
+                                @if (modelo.Tipo != TipoMovimiento.Ajuste)
+                                {
+                                    <button type="button" class="btn btn-outline-secondary" @onclick="() => modelo.Cantidad = seleccion.Cantidad">Todo</button>
+                                }
+                            </div>
+                            @if (modelo.Tipo == TipoMovimiento.Ajuste)
+                            {
+                                var dif = modelo.Cantidad - seleccion.Cantidad;
+                                <div class="form-text @(dif < 0 ? "text-danger" : dif > 0 ? "text-success" : "")">
+                                    Diferencia: @dif.ToString("+#,##0.000;-#,##0.000;0")
+                                </div>
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Referencia</label>
+                            <InputText class="form-control" @bind-Value="modelo.Referencia" maxlength="50" placeholder="Orden, guía, acta…" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Observación @(modelo.Tipo is TipoMovimiento.Ajuste or TipoMovimiento.Merma ? "(motivo) *" : "")</label>
+                            <InputTextArea class="form-control" rows="2" @bind-Value="modelo.Observacion" maxlength="250" />
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100" disabled="@guardando">
+                            <i class="bi bi-check2-circle"></i> Registrar @modelo.Tipo.Nombre().ToLower()
+                        </button>
+                    </EditForm>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "existencia")]
+    public int? ExistenciaId { get; set; }
+
+    private static readonly TipoMovimiento[] tipos =
+        [TipoMovimiento.Salida, TipoMovimiento.Transferencia, TipoMovimiento.Ajuste, TipoMovimiento.Merma];
+
+    private MovimientoModel modelo = new();
+    private List<StockUbicacionVista> stock = [];
+    private List<Ubicacion> ubicaciones = [];
+    private Dictionary<int, EstadoConservacion> conservacion = [];
+    private StockUbicacionVista? seleccion;
+    private string filtro = string.Empty;
+    private bool guardando;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private IEnumerable<StockUbicacionVista> StockFiltrado => string.IsNullOrWhiteSpace(filtro)
+        ? stock
+        : stock.Where(s => s.Producto.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                        || s.Lote.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                        || s.Ubicacion.Contains(filtro, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<Ubicacion> Destinos => seleccion is null
+        ? []
+        : ubicaciones.Where(u => u.Id != seleccion.UbicacionId
+                              && ReglasInventario.EsCompatible(conservacion[seleccion.ProductoId], u.Tipo));
+
+    private string Ayuda => modelo.Tipo switch
+    {
+        TipoMovimiento.Salida => "Despacho de un lote específico. Para despachar por producto aplicando FEFO use \"Despacho FEFO\".",
+        TipoMovimiento.Transferencia => "Reubica stock entre ubicaciones o bodegas, validando cadena de frío y capacidad del destino.",
+        TipoMovimiento.Ajuste => "Conteo físico: ingrese la cantidad real y el sistema registra la diferencia.",
+        TipoMovimiento.Merma => "Baja por deterioro, descongelamiento, vencimiento, etc. El motivo es obligatorio.",
+        _ => ""
+    };
+
+    private static string Icono(TipoMovimiento t) => t switch
+    {
+        TipoMovimiento.Salida => "bi-box-arrow-up",
+        TipoMovimiento.Transferencia => "bi-arrow-left-right",
+        TipoMovimiento.Ajuste => "bi-sliders",
+        TipoMovimiento.Merma => "bi-trash3",
+        _ => "bi-circle"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        ubicaciones = await db.Ubicaciones.AsNoTracking().Include(u => u.Bodega)
+            .Where(u => u.Activo && u.Bodega.Activo)
+            .OrderBy(u => u.Bodega.Codigo).ThenBy(u => u.Codigo)
+            .ToListAsync();
+        conservacion = await db.Productos.AsNoTracking().ToDictionaryAsync(p => p.Id, p => p.EstadoConservacion);
+        await CargarStockAsync();
+
+        if (ExistenciaId is not null && stock.FirstOrDefault(s => s.ExistenciaId == ExistenciaId) is { } s)
+            Seleccionar(s);
+    }
+
+    private async Task CargarStockAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        stock = await db.StockPorUbicacion.AsNoTracking()
+            .OrderBy(s => s.Producto).ThenBy(s => s.FechaVencimiento)
+            .ToListAsync();
+    }
+
+    private void Seleccionar(StockUbicacionVista s)
+    {
+        seleccion = s;
+        modelo.LoteId = s.LoteId;
+        modelo.UbicacionOrigenId = s.UbicacionId;
+        modelo.UbicacionDestinoId = 0;
+        modelo.Cantidad = modelo.Tipo == TipoMovimiento.Ajuste ? s.Cantidad : 0;
+    }
+
+    private async Task Registrar()
+    {
+        guardando = true;
+        try
+        {
+            await Inventario.RegistrarMovimientoAsync(modelo);
+            (mensaje, tipoMensaje) = ($"{modelo.Tipo.Nombre()} registrada correctamente.", "success");
+            modelo = new MovimientoModel { Tipo = modelo.Tipo };
+            seleccion = null;
+            await CargarStockAsync();
+        }
+        catch (ReglaNegocioException ex)
+        {
+            (mensaje, tipoMensaje) = (ex.Message, "danger");
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+}

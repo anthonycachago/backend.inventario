@@ -1,0 +1,118 @@
+@page "/inventario/existencias"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Existencias</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-boxes"></i> Existencias por ubicación</h1>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body row g-2 align-items-end">
+        <div class="col-sm-6 col-lg-3">
+            <label class="form-label small">Bodega</label>
+            <select class="form-select" @bind="bodegaId" @bind:after="CargarAsync">
+                <option value="">Todas</option>
+                @foreach (var b in bodegas)
+                {
+                    <option value="@b.Id">@b.Codigo · @b.Nombre</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <label class="form-label small">Ubicación</label>
+            <select class="form-select" @bind="Ubicacion" @bind:after="CargarAsync">
+                <option value="">Todas</option>
+                @foreach (var u in ubicaciones.Where(u => bodegaId == null || u.BodegaId == bodegaId))
+                {
+                    <option value="@u.Id">@u.Bodega.Codigo · @u.Codigo</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <label class="form-label small">Buscar</label>
+            <input class="form-control" placeholder="Producto o lote…" @bind="filtro" @bind:event="oninput" />
+        </div>
+        <div class="col-sm-6 col-lg-3">
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="por-vencer" @bind="soloPorVencer" />
+                <label class="form-check-label" for="por-vencer">Solo vencidos / por vencer (≤ @ReglasInventario.DiasAlertaVencimiento d)</label>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex flex-wrap gap-4 mb-2 small">
+    <span><strong>@Filas.Count()</strong> registros</span>
+    <span>Valor: <strong>@Filas.Sum(s => s.Cantidad * s.CostoUnitario).ToString("C2")</strong></span>
+</div>
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Bodega</th><th>Ubicación</th><th>Producto</th><th>Lote</th>
+                    <th class="num">Cantidad</th><th class="num">Costo</th><th>Vencimiento</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Filas)
+                {
+                    <tr>
+                        <td>@s.Bodega</td>
+                        <td><code>@s.Ubicacion</code> <span class="small text-body-secondary">@Textos.NombreTipoUbicacion(s.TipoUbicacion)</span></td>
+                        <td>@s.Producto</td>
+                        <td><a href="@($"inventario/kardex?lote={s.LoteId}")"><code>@s.Lote</code></a></td>
+                        <td class="num fw-semibold">@s.Cantidad.ToString("N3") @Textos.Abreviatura(s.UnidadMedida)</td>
+                        <td class="num">@((s.Cantidad * s.CostoUnitario).ToString("C2"))</td>
+                        <td class="text-nowrap">@s.FechaVencimiento.ToString("dd/MM/yyyy") <EstadoVencimiento Dias="s.DiasParaVencer" /></td>
+                        <td class="text-end">
+                            <a class="btn btn-sm btn-outline-primary" title="Mover" href="@($"inventario/movimientos?existencia={s.ExistenciaId}")"><i class="bi bi-arrow-left-right"></i></a>
+                        </td>
+                    </tr>
+                }
+                @if (!Filas.Any())
+                {
+                    <tr><td colspan="8" class="text-center text-body-secondary py-4">Sin existencias para los filtros seleccionados.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "ubicacion")]
+    public int? Ubicacion { get; set; }
+
+    private List<Bodega> bodegas = [];
+    private List<Ubicacion> ubicaciones = [];
+    private List<StockUbicacionVista> stock = [];
+    private int? bodegaId;
+    private string filtro = string.Empty;
+    private bool soloPorVencer;
+
+    private IEnumerable<StockUbicacionVista> Filas => stock
+        .Where(s => !soloPorVencer || s.DiasParaVencer <= ReglasInventario.DiasAlertaVencimiento)
+        .Where(s => string.IsNullOrWhiteSpace(filtro)
+                    || s.Producto.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                    || s.Lote.Contains(filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        bodegas = await db.Bodegas.AsNoTracking().OrderBy(b => b.Codigo).ToListAsync();
+        ubicaciones = await db.Ubicaciones.AsNoTracking().Include(u => u.Bodega)
+            .OrderBy(u => u.Bodega.Codigo).ThenBy(u => u.Codigo).ToListAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        stock = await db.StockPorUbicacion.AsNoTracking()
+            .Where(s => (bodegaId == null || s.BodegaId == bodegaId) && (Ubicacion == null || s.UbicacionId == Ubicacion))
+            .OrderBy(s => s.Bodega).ThenBy(s => s.Ubicacion).ThenBy(s => s.FechaVencimiento)
+            .ToListAsync();
+    }
+}

@@ -1,0 +1,109 @@
+@page "/catalogos/categorias"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Categorías</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-diagram-3-fill"></i> Categorías</h1>
+    <button class="btn btn-primary" @onclick="Nuevo"><i class="bi bi-plus-lg"></i> Nueva categoría</button>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+@if (edicion is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">@(edicion.Id == 0 ? "Nueva categoría" : "Editar categoría")</div>
+        <div class="card-body">
+            <EditForm Model="edicion" OnSubmit="Guardar">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Nombre *</label>
+                        <InputText class="form-control" @bind-Value="edicion.Nombre" maxlength="100" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Descripción</label>
+                        <InputText class="form-control" @bind-Value="edicion.Descripcion" maxlength="250" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <InputCheckbox class="form-check-input" id="cat-activo" @bind-Value="edicion.Activo" />
+                            <label class="form-check-label" for="cat-activo">Activa</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => edicion = null">Cancelar</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr><th>Nombre</th><th>Descripción</th><th class="num">Productos</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var c in categorias)
+                {
+                    <tr>
+                        <td class="fw-semibold">@c.Nombre</td>
+                        <td>@c.Descripcion</td>
+                        <td class="num">@c.Productos.Count</td>
+                        <td><span class="badge @(c.Activo ? "text-bg-success" : "text-bg-secondary")">@(c.Activo ? "Activa" : "Inactiva")</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(c)"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<Categoria> categorias = [];
+    private Categoria? edicion;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        categorias = await db.Categorias.AsNoTracking().Include(c => c.Productos).OrderBy(c => c.Nombre).ToListAsync();
+    }
+
+    private void Nuevo() => edicion = new Categoria();
+
+    private void Editar(Categoria c) =>
+        edicion = new Categoria { Id = c.Id, Nombre = c.Nombre, Descripcion = c.Descripcion, Activo = c.Activo };
+
+    private async Task Guardar()
+    {
+        if (string.IsNullOrWhiteSpace(edicion!.Nombre))
+        {
+            (mensaje, tipoMensaje) = ("El nombre es obligatorio.", "danger");
+            return;
+        }
+
+        edicion.Nombre = edicion.Nombre.Trim();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Categorias.AnyAsync(c => c.Nombre == edicion.Nombre && c.Id != edicion.Id))
+        {
+            (mensaje, tipoMensaje) = ($"Ya existe la categoría \"{edicion.Nombre}\".", "danger");
+            return;
+        }
+
+        db.Update(edicion);
+        await db.SaveChangesAsync();
+        (mensaje, tipoMensaje) = ("Categoría guardada.", "success");
+        edicion = null;
+        await CargarAsync();
+    }
+}

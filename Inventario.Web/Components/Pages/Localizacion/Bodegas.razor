@@ -1,0 +1,155 @@
+@page "/localizacion/bodegas"
+@using System.Globalization
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Bodegas</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-buildings"></i> Bodegas</h1>
+    <button class="btn btn-primary" @onclick="Nuevo"><i class="bi bi-plus-lg"></i> Nueva bodega</button>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+@if (edicion is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">@(edicion.Id == 0 ? "Nueva bodega" : $"Editar {edicion.Codigo}")</div>
+        <div class="card-body">
+            <EditForm Model="edicion" OnSubmit="Guardar">
+                <div class="row g-3">
+                    <div class="col-sm-4 col-lg-2">
+                        <label class="form-label">Código *</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="edicion.Codigo" maxlength="20" />
+                    </div>
+                    <div class="col-sm-8 col-lg-4">
+                        <label class="form-label">Nombre *</label>
+                        <InputText class="form-control" @bind-Value="edicion.Nombre" maxlength="100" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Ciudad</label>
+                        <InputText class="form-control" @bind-Value="edicion.Ciudad" maxlength="100" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <InputCheckbox class="form-check-input" id="bod-activo" @bind-Value="edicion.Activo" />
+                            <label class="form-check-label" for="bod-activo">Activa</label>
+                        </div>
+                    </div>
+                    <div class="col-lg-6">
+                        <label class="form-label">Dirección</label>
+                        <InputText class="form-control" @bind-Value="edicion.Direccion" maxlength="250" />
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label">Latitud</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.Latitud" step="0.000001" placeholder="-2.170998" />
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label">Longitud</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.Longitud" step="0.000001" placeholder="-79.922359" />
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => edicion = null">Cancelar</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="row g-3">
+    @foreach (var b in bodegas)
+    {
+        <div class="col-md-6 col-xl-4">
+            <div class="card h-100 @(b.Activo ? "" : "opacity-50")">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <span class="badge text-bg-secondary mb-1">@b.Codigo</span>
+                            <h2 class="h5 mb-1">@b.Nombre</h2>
+                            <div class="small text-body-secondary"><i class="bi bi-geo-alt"></i> @b.Direccion @(b.Ciudad is null ? "" : $"· {b.Ciudad}")</div>
+                        </div>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(b)"><i class="bi bi-pencil"></i></button>
+                    </div>
+                    <hr />
+                    <div class="d-flex flex-wrap gap-3 small">
+                        <span><i class="bi bi-grid-3x3"></i> @b.Ubicaciones.Count ubicaciones</span>
+                        <span><i class="bi bi-snow"></i> @b.Ubicaciones.Count(u => u.Tipo == TipoUbicacion.CamaraCongelacion) congelación</span>
+                        <span><i class="bi bi-thermometer-low"></i> @b.Ubicaciones.Count(u => u.Tipo == TipoUbicacion.CamaraRefrigeracion) refrigeración</span>
+                    </div>
+                    <div class="mt-3 d-flex gap-2">
+                        <a class="btn btn-sm btn-outline-secondary" href="@($"localizacion/ubicaciones?bodega={b.Id}")"><i class="bi bi-list-ul"></i> Ubicaciones</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="@($"localizacion/mapa?bodega={b.Id}")"><i class="bi bi-grid-3x3-gap"></i> Mapa</a>
+                        @if (b.Latitud is not null && b.Longitud is not null)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener"
+                               href="@($"https://www.openstreetmap.org/?mlat={Coord(b.Latitud)}&mlon={Coord(b.Longitud)}#map=17/{Coord(b.Latitud)}/{Coord(b.Longitud)}")">
+                                <i class="bi bi-map"></i> Ver en mapa
+                            </a>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    @if (bodegas.Count == 0)
+    {
+        <div class="col"><div class="alert alert-info">No hay bodegas registradas. Cree la primera para poder definir ubicaciones.</div></div>
+    }
+</div>
+
+@code {
+    private List<Bodega> bodegas = [];
+    private Bodega? edicion;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private static string Coord(decimal? valor) => valor!.Value.ToString(CultureInfo.InvariantCulture);
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        bodegas = await db.Bodegas.AsNoTracking().Include(b => b.Ubicaciones).OrderBy(b => b.Codigo).ToListAsync();
+    }
+
+    private void Nuevo() => edicion = new Bodega();
+
+    private void Editar(Bodega b) => edicion = new Bodega
+    {
+        Id = b.Id, Codigo = b.Codigo, Nombre = b.Nombre, Direccion = b.Direccion, Ciudad = b.Ciudad,
+        Latitud = b.Latitud, Longitud = b.Longitud, Activo = b.Activo
+    };
+
+    private async Task Guardar()
+    {
+        var b = edicion!;
+        b.Codigo = b.Codigo.Trim().ToUpperInvariant();
+        b.Nombre = b.Nombre.Trim();
+
+        string? error = null;
+        if (b.Codigo.Length == 0 || b.Nombre.Length == 0) error = "Código y nombre son obligatorios.";
+        else if (b.Latitud is < -90 or > 90 || b.Longitud is < -180 or > 180) error = "Coordenadas fuera de rango.";
+        else if ((b.Latitud is null) != (b.Longitud is null)) error = "Ingrese latitud y longitud, o ninguna.";
+        if (error is not null)
+        {
+            (mensaje, tipoMensaje) = (error, "danger");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Bodegas.AnyAsync(x => x.Codigo == b.Codigo && x.Id != b.Id))
+        {
+            (mensaje, tipoMensaje) = ($"El código {b.Codigo} ya está en uso.", "danger");
+            return;
+        }
+
+        db.Update(b);
+        await db.SaveChangesAsync();
+        (mensaje, tipoMensaje) = ($"Bodega {b.Codigo} guardada.", "success");
+        edicion = null;
+        await CargarAsync();
+    }
+}

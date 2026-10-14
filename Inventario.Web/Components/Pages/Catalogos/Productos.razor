@@ -1,0 +1,214 @@
+@page "/catalogos/productos"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Productos</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-tags-fill"></i> Productos</h1>
+    <div class="d-flex gap-2">
+        <input class="form-control" placeholder="Buscar código o nombre…" @bind="filtro" @bind:event="oninput" />
+        <button class="btn btn-primary text-nowrap" @onclick="Nuevo"><i class="bi bi-plus-lg"></i> Nuevo</button>
+    </div>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+@if (edicion is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">@(edicion.Id == 0 ? "Nuevo producto" : $"Editar {edicion.Codigo}")</div>
+        <div class="card-body">
+            <EditForm Model="edicion" OnSubmit="Guardar">
+                <div class="row g-3">
+                    <div class="col-sm-4 col-lg-2">
+                        <label class="form-label">Código *</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="edicion.Codigo" maxlength="30" />
+                    </div>
+                    <div class="col-sm-8 col-lg-4">
+                        <label class="form-label">Nombre *</label>
+                        <InputText class="form-control" @bind-Value="edicion.Nombre" maxlength="150" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Nombre científico</label>
+                        <InputText class="form-control fst-italic" @bind-Value="edicion.NombreCientifico" maxlength="150" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Categoría *</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.CategoriaId">
+                            <option value="0">— Seleccione —</option>
+                            @foreach (var c in categorias)
+                            {
+                                <option value="@c.Id">@c.Nombre</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Presentación</label>
+                        <InputText class="form-control" @bind-Value="edicion.Presentacion" maxlength="50" placeholder="Entero, filete, cola…" />
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Conservación</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.EstadoConservacion">
+                            @foreach (var e in Enum.GetValues<EstadoConservacion>())
+                            {
+                                <option value="@e">@e</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-sm-6 col-lg-2">
+                        <label class="form-label">Unidad</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.UnidadMedida">
+                            @foreach (var u in Enum.GetValues<UnidadMedida>())
+                            {
+                                <option value="@u">@u</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Temp. mín. (°C)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.TemperaturaMinima" step="0.1" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Temp. máx. (°C)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.TemperaturaMaxima" step="0.1" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Vida útil (días)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.DiasVidaUtil" min="0" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Stock mínimo</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.StockMinimo" min="0" step="0.001" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Precio de venta ($)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.PrecioVenta" min="0" step="0.01" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">IVA</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.TarifaIva">
+                            <option value="0">0 % (natural, fresco/congelado)</option>
+                            <option value="15">15 % (procesado)</option>
+                            <option value="5">5 %</option>
+                        </InputSelect>
+                    </div>
+                    <div class="col-lg-2 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <InputCheckbox class="form-check-input" id="prod-activo" @bind-Value="edicion.Activo" />
+                            <label class="form-check-label" for="prod-activo">Activo</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => edicion = null">Cancelar</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Código</th><th>Producto</th><th>Categoría</th><th>Conservación</th>
+                    <th class="num">Rango °C</th><th class="num">Vida útil</th><th class="num">Stock mín.</th><th class="num">Precio</th><th>Estado</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Filtrados)
+                {
+                    <tr>
+                        <td><code>@p.Codigo</code></td>
+                        <td>
+                            <div class="fw-semibold">@p.Nombre</div>
+                            <div class="small text-body-secondary"><i>@p.NombreCientifico</i> @p.Presentacion</div>
+                        </td>
+                        <td>@p.Categoria.Nombre</td>
+                        <td>@p.EstadoConservacion</td>
+                        <td class="num">@p.TemperaturaMinima?.ToString("N1") – @p.TemperaturaMaxima?.ToString("N1")</td>
+                        <td class="num">@p.DiasVidaUtil d</td>
+                        <td class="num">@p.StockMinimo.ToString("N3") @p.UnidadMedida.Abreviatura()</td>
+                        <td class="num">@p.PrecioVenta.ToString("C2") <span class="small text-body-secondary">IVA @p.TarifaIva.ToString("0")%</span></td>
+                        <td><span class="badge @(p.Activo ? "text-bg-success" : "text-bg-secondary")">@(p.Activo ? "Activo" : "Inactivo")</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(p)"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<Producto> productos = [];
+    private List<Categoria> categorias = [];
+    private Producto? edicion;
+    private string filtro = string.Empty;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private IEnumerable<Producto> Filtrados => string.IsNullOrWhiteSpace(filtro)
+        ? productos
+        : productos.Where(p => p.Codigo.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                            || p.Nombre.Contains(filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        categorias = await db.Categorias.AsNoTracking().Where(c => c.Activo).OrderBy(c => c.Nombre).ToListAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        productos = await db.Productos.AsNoTracking().Include(p => p.Categoria).OrderBy(p => p.Nombre).ToListAsync();
+    }
+
+    private void Nuevo() => edicion = new Producto { EstadoConservacion = EstadoConservacion.Congelado, DiasVidaUtil = 180 };
+
+    private void Editar(Producto p) => edicion = new Producto
+    {
+        Id = p.Id, Codigo = p.Codigo, Nombre = p.Nombre, NombreCientifico = p.NombreCientifico, Presentacion = p.Presentacion,
+        UnidadMedida = p.UnidadMedida, EstadoConservacion = p.EstadoConservacion, TemperaturaMinima = p.TemperaturaMinima,
+        TemperaturaMaxima = p.TemperaturaMaxima, DiasVidaUtil = p.DiasVidaUtil, StockMinimo = p.StockMinimo,
+        Activo = p.Activo, FechaCreacion = p.FechaCreacion, CategoriaId = p.CategoriaId,
+        // Round quita la escala (15.00 -> 15) para que el select encuentre la opción
+        PrecioVenta = p.PrecioVenta, TarifaIva = decimal.Round(p.TarifaIva, 0)
+    };
+
+    private async Task Guardar()
+    {
+        var p = edicion!;
+        p.Codigo = p.Codigo.Trim().ToUpperInvariant();
+        p.Nombre = p.Nombre.Trim();
+
+        string? error = null;
+        if (p.Codigo.Length == 0 || p.Nombre.Length == 0) error = "Código y nombre son obligatorios.";
+        else if (p.CategoriaId == 0) error = "Seleccione una categoría.";
+        else if (p.TemperaturaMinima > p.TemperaturaMaxima) error = "La temperatura mínima no puede ser mayor que la máxima.";
+        else if (p.DiasVidaUtil < 0 || p.StockMinimo < 0) error = "Vida útil y stock mínimo no pueden ser negativos.";
+        if (error is not null)
+        {
+            (mensaje, tipoMensaje) = (error, "danger");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Productos.AnyAsync(x => x.Codigo == p.Codigo && x.Id != p.Id))
+        {
+            (mensaje, tipoMensaje) = ($"El código {p.Codigo} ya está en uso.", "danger");
+            return;
+        }
+
+        db.Update(p);
+        await db.SaveChangesAsync();
+        (mensaje, tipoMensaje) = ($"Producto {p.Codigo} guardado.", "success");
+        edicion = null;
+        await CargarAsync();
+    }
+}

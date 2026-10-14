@@ -1,0 +1,221 @@
+@page "/localizacion/ubicaciones"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Ubicaciones</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-geo-alt-fill"></i> Ubicaciones</h1>
+    <div class="d-flex gap-2 flex-wrap">
+        <select class="form-select w-auto" @bind="Bodega" @bind:after="Filtrar">
+            <option value="">Todas las bodegas</option>
+            @foreach (var b in bodegas)
+            {
+                <option value="@b.Id">@b.Codigo · @b.Nombre</option>
+            }
+        </select>
+        <input class="form-control w-auto" placeholder="Buscar código o zona…" @bind="filtro" @bind:event="oninput" />
+        <button class="btn btn-primary text-nowrap" @onclick="Nuevo" disabled="@(bodegas.Count == 0)"><i class="bi bi-plus-lg"></i> Nueva</button>
+    </div>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+@if (edicion is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">@(edicion.Id == 0 ? "Nueva ubicación" : $"Editar {edicion.Codigo}")</div>
+        <div class="card-body">
+            <EditForm Model="edicion" OnSubmit="Guardar">
+                <div class="row g-3">
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Bodega *</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.BodegaId">
+                            <option value="0">— Seleccione —</option>
+                            @foreach (var b in bodegas)
+                            {
+                                <option value="@b.Id">@b.Codigo · @b.Nombre</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-sm-6 col-lg-3">
+                        <label class="form-label">Tipo</label>
+                        <InputSelect class="form-select" @bind-Value="edicion.Tipo">
+                            @foreach (var t in Enum.GetValues<TipoUbicacion>())
+                            {
+                                <option value="@t">@t.Nombre()</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-4 col-lg-2">
+                        <label class="form-label">Zona *</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="edicion.Zona" maxlength="20" placeholder="CC1" />
+                    </div>
+                    <div class="col-4 col-lg-1">
+                        <label class="form-label">Pasillo</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="edicion.Pasillo" maxlength="10" placeholder="P02" />
+                    </div>
+                    <div class="col-4 col-lg-1">
+                        <label class="form-label">Rack</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="edicion.Rack" maxlength="10" placeholder="R03" />
+                    </div>
+                    <div class="col-4 col-lg-2">
+                        <label class="form-label">Nivel</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="edicion.Nivel" maxlength="10" placeholder="N1" />
+                    </div>
+                    <div class="col-8 col-lg-3">
+                        <label class="form-label">Código</label>
+                        <div class="input-group">
+                            <InputText class="form-control text-uppercase" @bind-Value="edicion.Codigo" maxlength="30" placeholder="Se genera con zona-pasillo-rack-nivel" />
+                            <button type="button" class="btn btn-outline-secondary" title="Generar código" @onclick="GenerarCodigo"><i class="bi bi-magic"></i></button>
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Capacidad (kg)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.CapacidadKg" min="0" step="0.001" />
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <label class="form-label">Temp. objetivo (°C)</label>
+                        <InputNumber class="form-control" @bind-Value="edicion.TemperaturaObjetivo" step="0.1" />
+                    </div>
+                    <div class="col-lg-2 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <InputCheckbox class="form-check-input" id="ubi-activo" @bind-Value="edicion.Activo" />
+                            <label class="form-check-label" for="ubi-activo">Activa</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => edicion = null">Cancelar</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Código</th><th>Bodega</th><th>Tipo</th><th>Zona / Pasillo / Rack / Nivel</th>
+                    <th class="num">Capacidad</th><th class="num">Temp. obj.</th><th>Estado</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var u in Filtradas)
+                {
+                    <tr>
+                        <td><code>@u.Codigo</code></td>
+                        <td>@u.Bodega.Codigo</td>
+                        <td><span class="badge @u.Tipo.ClaseBadge()">@u.Tipo.Nombre()</span></td>
+                        <td>@u.Zona / @(u.Pasillo ?? "–") / @(u.Rack ?? "–") / @(u.Nivel ?? "–")</td>
+                        <td class="num">@(u.CapacidadKg?.ToString("N0") ?? "–") kg</td>
+                        <td class="num">@(u.TemperaturaObjetivo?.ToString("N1") ?? "–") °C</td>
+                        <td><span class="badge @(u.Activo ? "text-bg-success" : "text-bg-secondary")">@(u.Activo ? "Activa" : "Inactiva")</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(u)"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "bodega")]
+    public int? Bodega { get; set; }
+
+    private List<Bodega> bodegas = [];
+    private List<Ubicacion> ubicaciones = [];
+    private Ubicacion? edicion;
+    private string filtro = string.Empty;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private IEnumerable<Ubicacion> Filtradas => string.IsNullOrWhiteSpace(filtro)
+        ? ubicaciones
+        : ubicaciones.Where(u => u.Codigo.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                              || u.Zona.Contains(filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        bodegas = await db.Bodegas.AsNoTracking().Where(b => b.Activo).OrderBy(b => b.Codigo).ToListAsync();
+        await CargarAsync();
+    }
+
+    private Task Filtrar() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        ubicaciones = await db.Ubicaciones.AsNoTracking().Include(u => u.Bodega)
+            .Where(u => Bodega == null || u.BodegaId == Bodega)
+            .OrderBy(u => u.Bodega.Codigo).ThenBy(u => u.Codigo)
+            .ToListAsync();
+    }
+
+    private void Nuevo() => edicion = new Ubicacion
+    {
+        BodegaId = Bodega ?? bodegas.FirstOrDefault()?.Id ?? 0,
+        Tipo = TipoUbicacion.CamaraCongelacion,
+        TemperaturaObjetivo = -18
+    };
+
+    private void Editar(Ubicacion u) => edicion = new Ubicacion
+    {
+        Id = u.Id, BodegaId = u.BodegaId, Codigo = u.Codigo, Tipo = u.Tipo, Zona = u.Zona, Pasillo = u.Pasillo,
+        Rack = u.Rack, Nivel = u.Nivel, CapacidadKg = u.CapacidadKg, TemperaturaObjetivo = u.TemperaturaObjetivo, Activo = u.Activo
+    };
+
+    private void GenerarCodigo()
+    {
+        var partes = new[] { edicion!.Zona, edicion.Pasillo, edicion.Rack, edicion.Nivel }
+            .Where(p => !string.IsNullOrWhiteSpace(p)).Select(p => p!.Trim().ToUpperInvariant());
+        edicion.Codigo = string.Join("-", partes);
+    }
+
+    private async Task Guardar()
+    {
+        var u = edicion!;
+        if (string.IsNullOrWhiteSpace(u.Codigo)) GenerarCodigo();
+        u.Codigo = u.Codigo.Trim().ToUpperInvariant();
+        u.Zona = u.Zona.Trim().ToUpperInvariant();
+        u.Pasillo = Normalizar(u.Pasillo);
+        u.Rack = Normalizar(u.Rack);
+        u.Nivel = Normalizar(u.Nivel);
+
+        string? error = null;
+        if (u.BodegaId == 0) error = "Seleccione una bodega.";
+        else if (u.Zona.Length == 0 || u.Codigo.Length == 0) error = "Zona y código son obligatorios.";
+        else if (u.CapacidadKg <= 0) error = "La capacidad debe ser mayor a 0 (o déjela vacía).";
+        if (error is not null)
+        {
+            (mensaje, tipoMensaje) = (error, "danger");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Ubicaciones.AnyAsync(x => x.BodegaId == u.BodegaId && x.Codigo == u.Codigo && x.Id != u.Id))
+        {
+            (mensaje, tipoMensaje) = ($"La ubicación {u.Codigo} ya existe en esa bodega.", "danger");
+            return;
+        }
+        if (u.Id != 0 && !u.Activo && await db.Existencias.AnyAsync(e => e.UbicacionId == u.Id && e.Cantidad > 0))
+        {
+            (mensaje, tipoMensaje) = ("No se puede desactivar: la ubicación tiene stock. Transfiéralo primero.", "danger");
+            return;
+        }
+
+        db.Update(u);
+        await db.SaveChangesAsync();
+        (mensaje, tipoMensaje) = ($"Ubicación {u.Codigo} guardada.", "success");
+        edicion = null;
+        await CargarAsync();
+    }
+
+    private static string? Normalizar(string? valor) =>
+        string.IsNullOrWhiteSpace(valor) ? null : valor.Trim().ToUpperInvariant();
+}

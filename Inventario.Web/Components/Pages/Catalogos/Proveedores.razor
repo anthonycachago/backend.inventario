@@ -1,0 +1,148 @@
+@page "/catalogos/proveedores"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Proveedores</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-people-fill"></i> Proveedores</h1>
+    <div class="d-flex gap-2">
+        <input class="form-control" placeholder="Buscar RUC o razón social…" @bind="filtro" @bind:event="oninput" />
+        <button class="btn btn-primary text-nowrap" @onclick="Nuevo"><i class="bi bi-plus-lg"></i> Nuevo</button>
+    </div>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+@if (edicion is not null)
+{
+    <div class="card mb-3">
+        <div class="card-header fw-semibold">@(edicion.Id == 0 ? "Nuevo proveedor" : "Editar proveedor")</div>
+        <div class="card-body">
+            <EditForm Model="edicion" OnSubmit="Guardar">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">RUC / Cédula *</label>
+                        <ConsultaSri Valor="@edicion.Identificacion" ValorChanged="v => edicion.Identificacion = v ?? string.Empty"
+                                     AlEncontrar="AplicarSri" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Razón social *</label>
+                        <InputText class="form-control" @bind-Value="edicion.RazonSocial" maxlength="200" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Teléfono</label>
+                        <InputText class="form-control" @bind-Value="edicion.Telefono" maxlength="20" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Email</label>
+                        <InputText type="email" class="form-control" @bind-Value="edicion.Email" maxlength="150" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Dirección</label>
+                        <InputText class="form-control" @bind-Value="edicion.Direccion" maxlength="250" />
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <div class="form-check form-switch mb-2">
+                            <InputCheckbox class="form-check-input" id="prov-activo" @bind-Value="edicion.Activo" />
+                            <label class="form-check-label" for="prov-activo">Activo</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-3 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-save"></i> Guardar</button>
+                    <button type="button" class="btn btn-outline-secondary" @onclick="() => edicion = null">Cancelar</button>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr><th>Identificación</th><th>Razón social</th><th>Contacto</th><th>Dirección</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody>
+                @foreach (var p in Filtrados)
+                {
+                    <tr>
+                        <td><code>@p.Identificacion</code></td>
+                        <td class="fw-semibold">@p.RazonSocial</td>
+                        <td class="small">@p.Telefono<br />@p.Email</td>
+                        <td class="small">@p.Direccion</td>
+                        <td><span class="badge @(p.Activo ? "text-bg-success" : "text-bg-secondary")">@(p.Activo ? "Activo" : "Inactivo")</span></td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => Editar(p)"><i class="bi bi-pencil"></i></button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private List<Proveedor> proveedores = [];
+    private Proveedor? edicion;
+    private string filtro = string.Empty;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private IEnumerable<Proveedor> Filtrados => string.IsNullOrWhiteSpace(filtro)
+        ? proveedores
+        : proveedores.Where(p => p.Identificacion.Contains(filtro, StringComparison.OrdinalIgnoreCase)
+                              || p.RazonSocial.Contains(filtro, StringComparison.OrdinalIgnoreCase));
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        proveedores = await db.Proveedores.AsNoTracking().OrderBy(p => p.RazonSocial).ToListAsync();
+    }
+
+    private void Nuevo() => edicion = new Proveedor();
+
+    private void Editar(Proveedor p) => edicion = new Proveedor
+    {
+        Id = p.Id, Identificacion = p.Identificacion, RazonSocial = p.RazonSocial, Telefono = p.Telefono,
+        Email = p.Email, Direccion = p.Direccion, Activo = p.Activo
+    };
+
+    private void AplicarSri(ResultadoSri r)
+    {
+        edicion!.RazonSocial = r.Nombre;
+        if (r.Direccion is not null) edicion.Direccion = r.Direccion;
+    }
+
+    private async Task Guardar()
+    {
+        var p = edicion!;
+        p.Identificacion = p.Identificacion.Trim();
+        p.RazonSocial = p.RazonSocial.Trim();
+        if (p.Identificacion.Length == 0 || p.RazonSocial.Length == 0)
+        {
+            (mensaje, tipoMensaje) = ("Identificación y razón social son obligatorias.", "danger");
+            return;
+        }
+        if (IdentificacionEcuador.ValidarCedulaORuc(p.Identificacion) is { } invalida)
+        {
+            (mensaje, tipoMensaje) = (invalida, "danger");
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (await db.Proveedores.AnyAsync(x => x.Identificacion == p.Identificacion && x.Id != p.Id))
+        {
+            (mensaje, tipoMensaje) = ($"Ya existe un proveedor con identificación {p.Identificacion}.", "danger");
+            return;
+        }
+
+        db.Update(p);
+        await db.SaveChangesAsync();
+        (mensaje, tipoMensaje) = ("Proveedor guardado.", "success");
+        edicion = null;
+        await CargarAsync();
+    }
+}

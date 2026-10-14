@@ -1,0 +1,175 @@
+@page "/inventario/recepcion"
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject InventarioService Inventario
+
+<PageTitle>Recepción</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-box-arrow-in-down"></i> Recepción de mercadería</h1>
+</div>
+
+<Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+<EditForm Model="modelo" OnValidSubmit="Registrar">
+    <DataAnnotationsValidator />
+    <div class="row g-3">
+        <div class="col-xl-8">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Producto y lote</div>
+                <div class="card-body row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label">Producto *</label>
+                        <InputSelect class="form-select" @bind-Value="modelo.ProductoId">
+                            <option value="0">— Seleccione —</option>
+                            @foreach (var p in productos)
+                            {
+                                <option value="@p.Id">@p.Codigo · @p.Nombre @p.Presentacion</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => modelo.ProductoId" />
+                        @if (Producto is not null)
+                        {
+                            <div class="form-text">
+                                @Producto.EstadoConservacion · @Producto.TemperaturaMinima?.ToString("N1") a @Producto.TemperaturaMaxima?.ToString("N1") °C ·
+                                vida útil @Producto.DiasVidaUtil días
+                            </div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Proveedor</label>
+                        <InputSelect class="form-select" @bind-Value="modelo.ProveedorId">
+                            <option value="">— Sin proveedor —</option>
+                            @foreach (var p in proveedores)
+                            {
+                                <option value="@p.Id">@p.RazonSocial</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Código de lote *</label>
+                        <InputText class="form-control text-uppercase" @bind-Value="modelo.CodigoLote" maxlength="40" />
+                        <ValidationMessage For="() => modelo.CodigoLote" />
+                        <div class="form-text">Si el lote ya existe para el producto, se suma a él.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Fecha de captura</label>
+                        <InputDate class="form-control" @bind-Value="modelo.FechaCaptura" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Fecha de vencimiento</label>
+                        <InputDate class="form-control" @bind-Value="modelo.FechaVencimiento" />
+                        <div class="form-text">Vacío: @(VencimientoSugerido?.ToString("dd/MM/yyyy") ?? "captura + vida útil")</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Origen</label>
+                        <InputText class="form-control" @bind-Value="modelo.Origen" maxlength="200" placeholder="Zona de pesca, embarcación, camaronera…" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Certificado sanitario</label>
+                        <InputText class="form-control" @bind-Value="modelo.CertificadoSanitario" maxlength="100" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4">
+            <div class="card h-100">
+                <div class="card-header fw-semibold">Cantidad y ubicación</div>
+                <div class="card-body row g-3">
+                    <div class="col-6 col-xl-12">
+                        <label class="form-label">Cantidad * @(Producto is null ? "" : $"({Producto.UnidadMedida.Abreviatura()})")</label>
+                        <InputNumber class="form-control" @bind-Value="modelo.Cantidad" step="0.001" min="0" />
+                        <ValidationMessage For="() => modelo.Cantidad" />
+                    </div>
+                    <div class="col-6 col-xl-12">
+                        <label class="form-label">Costo unitario ($)</label>
+                        <InputNumber class="form-control" @bind-Value="modelo.CostoUnitario" step="0.0001" min="0" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Ubicación de destino *</label>
+                        <InputSelect class="form-select" @bind-Value="modelo.UbicacionId">
+                            <option value="0">— Seleccione —</option>
+                            @foreach (var g in UbicacionesCompatibles.GroupBy(u => u.Bodega.Codigo))
+                            {
+                                <optgroup label="@g.Key">
+                                    @foreach (var u in g)
+                                    {
+                                        <option value="@u.Id">@u.Codigo · @u.Tipo.Nombre()</option>
+                                    }
+                                </optgroup>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="() => modelo.UbicacionId" />
+                        @if (Producto is not null)
+                        {
+                            <div class="form-text">Solo se listan ubicaciones compatibles con producto @Producto.EstadoConservacion.ToString().ToLower().</div>
+                        }
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Referencia</label>
+                        <InputText class="form-control" @bind-Value="modelo.Referencia" maxlength="50" placeholder="Factura, guía de remisión…" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label">Observación</label>
+                        <InputTextArea class="form-control" rows="2" @bind-Value="modelo.Observacion" maxlength="250" />
+                    </div>
+                    <div class="col-12">
+                        <button type="submit" class="btn btn-success w-100" disabled="@guardando">
+                            <i class="bi bi-check2-circle"></i> Registrar entrada
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</EditForm>
+
+@code {
+    private EntradaModel modelo = new();
+    private List<Producto> productos = [];
+    private List<Proveedor> proveedores = [];
+    private List<Ubicacion> ubicaciones = [];
+    private bool guardando;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    private Producto? Producto => productos.FirstOrDefault(p => p.Id == modelo.ProductoId);
+
+    private IEnumerable<Ubicacion> UbicacionesCompatibles => Producto is null
+        ? ubicaciones
+        : ubicaciones.Where(u => ReglasInventario.EsCompatible(Producto.EstadoConservacion, u.Tipo));
+
+    private DateTime? VencimientoSugerido => Producto is null
+        ? null
+        : (modelo.FechaCaptura ?? DateTime.Today).AddDays(Producto.DiasVidaUtil);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        productos = await db.Productos.AsNoTracking().Where(p => p.Activo).OrderBy(p => p.Nombre).ToListAsync();
+        proveedores = await db.Proveedores.AsNoTracking().Where(p => p.Activo).OrderBy(p => p.RazonSocial).ToListAsync();
+        ubicaciones = await db.Ubicaciones.AsNoTracking().Include(u => u.Bodega)
+            .Where(u => u.Activo && u.Bodega.Activo)
+            .OrderBy(u => u.Bodega.Codigo).ThenBy(u => u.Codigo)
+            .ToListAsync();
+    }
+
+    private async Task Registrar()
+    {
+        guardando = true;
+        try
+        {
+            var lote = await Inventario.RegistrarEntradaAsync(modelo);
+            (mensaje, tipoMensaje) = ($"Entrada registrada: {modelo.Cantidad:N3} en el lote {lote.Codigo} (vence {lote.FechaVencimiento:dd/MM/yyyy}).", "success");
+            modelo = new EntradaModel { ProveedorId = modelo.ProveedorId, UbicacionId = modelo.UbicacionId };
+        }
+        catch (ReglaNegocioException ex)
+        {
+            (mensaje, tipoMensaje) = (ex.Message, "danger");
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+}

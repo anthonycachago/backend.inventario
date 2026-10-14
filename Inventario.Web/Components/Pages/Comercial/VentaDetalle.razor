@@ -1,0 +1,239 @@
+@page "/ventas/{Id:int}"
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject VentasService Ventas
+
+<PageTitle>Venta @venta?.Numero</PageTitle>
+
+@if (venta is null)
+{
+    <p class="text-body-secondary">@(cargado ? "La venta no existe." : "Cargando…")</p>
+}
+else
+{
+    <div class="page-header">
+        <h1><i class="bi bi-receipt"></i> Venta @venta.Numero <EstadoCobro Venta="venta" /></h1>
+        <div class="d-flex gap-2">
+            <a class="btn btn-outline-secondary" href="ventas"><i class="bi bi-list-ul"></i> Ventas</a>
+            <a class="btn btn-success" href="ventas/nueva"><i class="bi bi-cart-plus"></i> Nueva venta</a>
+        </div>
+    </div>
+
+    <Mensaje @bind-Texto="mensaje" Tipo="@tipoMensaje" />
+
+    <div class="row g-3">
+        <div class="col-xl-8">
+            <div class="card mb-3">
+                <div class="card-body row small g-2">
+                    <div class="col-md-6">
+                        <div class="text-body-secondary">Cliente</div>
+                        <div class="fw-semibold fs-6">@venta.Cliente.RazonSocial</div>
+                        <div>@venta.Cliente.TipoIdentificacion.Nombre(): @venta.Cliente.Identificacion</div>
+                        <div>@venta.Cliente.Direccion</div>
+                    </div>
+                    <div class="col-md-6">
+                        <div><span class="text-body-secondary">Fecha:</span> @venta.Fecha.ToString("dd/MM/yyyy HH:mm")</div>
+                        <div><span class="text-body-secondary">Condición:</span> @venta.CondicionPago.Nombre()
+                            @if (venta.FechaVencimiento is { } f) { <span>· vence @f.ToString("dd/MM/yyyy")</span> }</div>
+                        <div><span class="text-body-secondary">Bodega:</span> @(venta.Bodega?.Nombre ?? "Cualquiera (FEFO global)")</div>
+                        @if (venta.Observacion is not null) { <div><span class="text-body-secondary">Obs.:</span> @venta.Observacion</div> }
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header fw-semibold">Detalle</div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Producto</th><th class="num">Cantidad</th><th class="num">Precio</th><th class="num">IVA</th><th class="num">Subtotal</th></tr></thead>
+                        <tbody>
+                            @foreach (var d in venta.Detalles)
+                            {
+                                <tr>
+                                    <td>@d.Producto.Nombre @d.Producto.Presentacion</td>
+                                    <td class="num">@d.Cantidad.ToString("N3") @d.Producto.UnidadMedida.Abreviatura()</td>
+                                    <td class="num">@d.PrecioUnitario.ToString("C4")</td>
+                                    <td class="num">@d.TarifaIva.ToString("0")%</td>
+                                    <td class="num">@d.Subtotal.ToString("C2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="small">
+                            <tr><td colspan="4" class="text-end">Subtotal 0 %</td><td class="num">@venta.Subtotal0.ToString("C2")</td></tr>
+                            <tr><td colspan="4" class="text-end">Subtotal con IVA</td><td class="num">@venta.SubtotalIva.ToString("C2")</td></tr>
+                            <tr><td colspan="4" class="text-end">IVA</td><td class="num">@venta.Iva.ToString("C2")</td></tr>
+                            <tr class="fw-semibold fs-6"><td colspan="4" class="text-end">Total</td><td class="num">@venta.Total.ToString("C2")</td></tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header fw-semibold"><i class="bi bi-truck"></i> Lotes despachados (FEFO)</div>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Producto</th><th>Lote</th><th>Ubicación</th><th>Vence</th><th class="num">Cantidad</th></tr></thead>
+                        <tbody>
+                            @foreach (var m in venta.Movimientos.OrderBy(m => m.Lote.Producto.Nombre))
+                            {
+                                <tr>
+                                    <td>@m.Lote.Producto.Nombre</td>
+                                    <td><a href="@($"inventario/kardex?lote={m.LoteId}")"><code>@m.Lote.Codigo</code></a></td>
+                                    <td>@m.UbicacionOrigen?.Codigo</td>
+                                    <td>@m.Lote.FechaVencimiento.ToString("dd/MM/yyyy")</td>
+                                    <td class="num">@m.Cantidad.ToString("N3")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-xl-4">
+            <div class="card mb-3">
+                <ul class="list-group list-group-flush">
+                    <li class="list-group-item d-flex justify-content-between"><span>Total</span><span class="num">@venta.Total.ToString("C2")</span></li>
+                    <li class="list-group-item d-flex justify-content-between"><span>Pagado</span><span class="num text-success">@((venta.Total - venta.Saldo).ToString("C2"))</span></li>
+                    <li class="list-group-item d-flex justify-content-between fs-5 fw-semibold"><span>Saldo</span><span class="num @(venta.Saldo > 0 ? "text-danger" : "")">@venta.Saldo.ToString("C2")</span></li>
+                </ul>
+            </div>
+
+            @if (venta.Saldo > 0)
+            {
+                <div class="card mb-3 border-primary">
+                    <div class="card-header fw-semibold">Registrar abono / pago</div>
+                    <div class="card-body">
+                        <PagoCampos Pago="nuevoPago" Sugerido="venta.Saldo" />
+                        <div class="mt-2">
+                            <input class="form-control form-control-sm" placeholder="Observación" maxlength="250" @bind="nuevoPago.Observacion" />
+                        </div>
+                        <button class="btn btn-primary w-100 mt-2" @onclick="RegistrarPago" disabled="@ocupado"><i class="bi bi-cash-coin"></i> Registrar pago</button>
+                    </div>
+                </div>
+            }
+
+            <div class="card">
+                <div class="card-header fw-semibold">Pagos</div>
+                <ul class="list-group list-group-flush">
+                    @foreach (var p in venta.Pagos.OrderBy(p => p.Fecha))
+                    {
+                        <li class="list-group-item @(p.Anulado ? "text-decoration-line-through text-body-secondary" : "")">
+                            <div class="d-flex justify-content-between">
+                                <span><i class="bi @p.FormaPago.Icono()"></i> @p.FormaPago.Nombre()</span>
+                                <span class="num fw-semibold">@p.Monto.ToString("C2")</span>
+                            </div>
+                            <div class="small text-body-secondary">
+                                @p.Fecha.ToString("dd/MM/yyyy HH:mm")
+                                @if (p.TarjetaMarca is not null)
+                                {
+                                    <span>· @p.TarjetaMarca.Value.Nombre() •••• @p.TarjetaUltimos4 · aut. @p.NumeroAutorizacion
+                                        @(p.NumeroLote is null ? "" : $"· lote {p.NumeroLote}") @(p.Cuotas > 1 ? $"· {p.Cuotas} meses" : "")</span>
+                                }
+                                @if (p.Referencia is not null) { <span>· Nº @p.Referencia @p.Banco</span> }
+                                @if (p.Observacion is not null) { <div>@p.Observacion</div> }
+                            </div>
+                            @if (p.Anulado)
+                            {
+                                <div class="small text-danger text-decoration-none">Anulado: @p.MotivoAnulacion</div>
+                            }
+                            else if (anulando == p.Id)
+                            {
+                                <div class="input-group input-group-sm mt-1">
+                                    <input class="form-control" placeholder="Motivo de anulación" maxlength="250" @bind="motivo" />
+                                    <button class="btn btn-danger" @onclick="() => AnularPago(p.Id)" disabled="@ocupado">Anular</button>
+                                    <button class="btn btn-outline-secondary" @onclick="() => anulando = null">✕</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <button class="btn btn-sm btn-link text-danger p-0" @onclick="() => { anulando = p.Id; motivo = null; }">Anular</button>
+                            }
+                        </li>
+                    }
+                    @if (venta.Pagos.Count == 0)
+                    {
+                        <li class="list-group-item text-body-secondary small">Sin pagos registrados.</li>
+                    }
+                </ul>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    [SupplyParameterFromQuery(Name = "nueva")]
+    public int? Nueva { get; set; }
+
+    private Venta? venta;
+    private bool cargado;
+    private PagoModel nuevoPago = new();
+    private int? anulando;
+    private string? motivo;
+    private bool ocupado;
+    private string? mensaje;
+    private string tipoMensaje = "success";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarAsync();
+        if (Nueva == 1 && venta is not null)
+            mensaje = $"Venta {venta.Numero} registrada. Stock despachado por FEFO.";
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        venta = await db.Ventas.AsNoTracking()
+            .Include(v => v.Cliente)
+            .Include(v => v.Bodega)
+            .Include(v => v.Detalles).ThenInclude(d => d.Producto)
+            .Include(v => v.Pagos)
+            .Include(v => v.Movimientos).ThenInclude(m => m.Lote).ThenInclude(l => l.Producto)
+            .Include(v => v.Movimientos).ThenInclude(m => m.UbicacionOrigen)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(v => v.Id == Id);
+        cargado = true;
+    }
+
+    private async Task RegistrarPago()
+    {
+        ocupado = true;
+        try
+        {
+            var pago = await Ventas.RegistrarPagoAsync(Id, nuevoPago);
+            (mensaje, tipoMensaje) = ($"Pago de {pago.Monto:C2} registrado.", "success");
+            nuevoPago = new PagoModel();
+            await CargarAsync();
+        }
+        catch (ReglaNegocioException ex)
+        {
+            (mensaje, tipoMensaje) = (ex.Message, "danger");
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private async Task AnularPago(int pagoId)
+    {
+        ocupado = true;
+        try
+        {
+            await Ventas.AnularPagoAsync(pagoId, motivo ?? string.Empty);
+            (mensaje, tipoMensaje) = ("Pago anulado: el monto volvió al saldo por cobrar.", "warning");
+            anulando = null;
+            await CargarAsync();
+        }
+        catch (ReglaNegocioException ex)
+        {
+            (mensaje, tipoMensaje) = (ex.Message, "danger");
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+}

@@ -1,0 +1,76 @@
+@page "/ventas/cartera"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Cuentas por cobrar</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-journal-bookmark"></i> Cuentas por cobrar</h1>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-lg"><TarjetaKpi Titulo="Total por cobrar" Valor="@Total(_ => true).ToString("C2")" Icono="bi-wallet2" Color="primary" /></div>
+    <div class="col-6 col-lg"><TarjetaKpi Titulo="Por vencer" Valor="@Total(d => d <= 0).ToString("C2")" Icono="bi-hourglass-split" Color="success" /></div>
+    <div class="col-6 col-lg"><TarjetaKpi Titulo="Vencido 1-30 d" Valor="@Total(d => d is > 0 and <= 30).ToString("C2")" Icono="bi-exclamation-circle" Color="warning" /></div>
+    <div class="col-6 col-lg"><TarjetaKpi Titulo="Vencido 31-90 d" Valor="@Total(d => d is > 30 and <= 90).ToString("C2")" Icono="bi-exclamation-triangle" Color="danger" /></div>
+    <div class="col-12 col-lg"><TarjetaKpi Titulo="Vencido > 90 d" Valor="@Total(d => d > 90).ToString("C2")" Icono="bi-x-octagon" Color="danger" /></div>
+</div>
+
+<div class="card">
+    <div class="card-header fw-semibold">Antigüedad de saldos por cliente</div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Cliente</th><th class="num">Facturas</th><th class="num">Por vencer</th><th class="num">1-30</th>
+                    <th class="num">31-90</th><th class="num">&gt; 90</th><th class="num">Total</th><th class="num">Límite</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var g in pendientes.GroupBy(p => p.Cliente).OrderByDescending(g => g.Sum(p => p.Saldo)))
+                {
+                    var total = g.Sum(p => p.Saldo);
+                    <tr>
+                        <td class="fw-semibold">@g.Key.RazonSocial</td>
+                        <td class="num">@g.Count()</td>
+                        <td class="num">@Celda(g.Where(p => p.DiasVencida <= 0))</td>
+                        <td class="num text-warning-emphasis">@Celda(g.Where(p => p.DiasVencida is > 0 and <= 30))</td>
+                        <td class="num text-danger">@Celda(g.Where(p => p.DiasVencida is > 30 and <= 90))</td>
+                        <td class="num text-danger fw-semibold">@Celda(g.Where(p => p.DiasVencida > 90))</td>
+                        <td class="num fw-semibold">@total.ToString("C2")</td>
+                        <td class="num @(g.Key.LimiteCredito > 0 && total > g.Key.LimiteCredito ? "text-danger" : "")">@g.Key.LimiteCredito.ToString("C0")</td>
+                        <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="@($"ventas?cliente={g.Key.Id}")"><i class="bi bi-receipt"></i></a></td>
+                    </tr>
+                }
+                @if (pendientes.Count == 0)
+                {
+                    <tr><td colspan="9" class="text-center text-body-secondary py-4"><i class="bi bi-check-circle text-success"></i> No hay cuentas por cobrar.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private record Pendiente(Cliente Cliente, decimal Saldo, int DiasVencida);
+
+    private List<Pendiente> pendientes = [];
+
+    private decimal Total(Func<int, bool> filtro) => pendientes.Where(p => filtro(p.DiasVencida)).Sum(p => p.Saldo);
+
+    private static string Celda(IEnumerable<Pendiente> items)
+    {
+        var suma = items.Sum(p => p.Saldo);
+        return suma == 0 ? "—" : suma.ToString("C2");
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var hoy = DateTime.Today;
+        // Identity resolution: una sola instancia de Cliente por id para poder agrupar
+        var ventas = await db.Ventas.AsNoTrackingWithIdentityResolution().Include(v => v.Cliente).Where(v => v.Saldo > 0).ToListAsync();
+        pendientes = ventas
+            .Select(v => new Pendiente(v.Cliente, v.Saldo, (hoy - (v.FechaVencimiento ?? v.Fecha).Date).Days))
+            .ToList();
+    }
+}

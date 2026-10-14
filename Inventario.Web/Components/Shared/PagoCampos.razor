@@ -1,0 +1,88 @@
+@* Campos de un pago. Para tarjetas se copian los datos del voucher del datáfono: nunca el número completo. *@
+
+<div class="row g-2">
+    <div class="col-sm-6">
+        <label class="form-label small mb-0">Forma de pago</label>
+        <select class="form-select form-select-sm" @bind="Pago.FormaPago">
+            @foreach (var f in Enum.GetValues<FormaPago>())
+            {
+                <option value="@f">@f.Nombre()</option>
+            }
+        </select>
+    </div>
+    <div class="col-sm-6">
+        <label class="form-label small mb-0">Monto ($)</label>
+        <div class="input-group input-group-sm">
+            <input type="number" step="0.01" min="0" class="form-control" @bind="Pago.Monto" />
+            @if (Sugerido is > 0)
+            {
+                <button type="button" class="btn btn-outline-secondary" title="Usar el saldo" @onclick="() => Pago.Monto = Sugerido.Value">
+                    @Sugerido.Value.ToString("C2")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (Pago.EsTarjeta)
+    {
+        <div class="col-sm-6">
+            <label class="form-label small mb-0">Marca *</label>
+            <select class="form-select form-select-sm" @bind="Pago.TarjetaMarca">
+                <option value="">— Seleccione —</option>
+                @foreach (var m in Enum.GetValues<MarcaTarjeta>())
+                {
+                    <option value="@m">@m.Nombre()</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label small mb-0">Últimos 4 dígitos *</label>
+            <div class="input-group input-group-sm">
+                <span class="input-group-text">•••• </span>
+                <input class="form-control" maxlength="4" inputmode="numeric" pattern="[0-9]{4}" autocomplete="off"
+                       @bind="Pago.TarjetaUltimos4" placeholder="1234" />
+            </div>
+        </div>
+        <div class="col-sm-4">
+            <label class="form-label small mb-0">Autorización *</label>
+            <input class="form-control form-control-sm" maxlength="20" autocomplete="off" @bind="Pago.NumeroAutorizacion" />
+        </div>
+        <div class="col-sm-4">
+            <label class="form-label small mb-0">Lote</label>
+            <input class="form-control form-control-sm" maxlength="20" autocomplete="off" @bind="Pago.NumeroLote" />
+        </div>
+        @if (Pago.FormaPago == FormaPago.TarjetaCredito)
+        {
+            <div class="col-sm-4">
+                <label class="form-label small mb-0">Cuotas</label>
+                <select class="form-select form-select-sm" @bind="Pago.Cuotas">
+                    <option value="1">Corriente</option>
+                    @foreach (var c in new[] { 3, 6, 9, 12, 18, 24, 36, 48 })
+                    {
+                        <option value="@c">Diferido @c meses</option>
+                    }
+                </select>
+            </div>
+        }
+        <div class="col-12 form-text mt-0">
+            <i class="bi bi-shield-lock"></i> Cobre en el datáfono y copie los datos del voucher. No ingrese el número completo, la fecha de expiración ni el CVV.
+        </div>
+    }
+    else if (Pago.RequiereReferencia)
+    {
+        <div class="col-sm-6">
+            <label class="form-label small mb-0">Nº de @(Pago.FormaPago == FormaPago.Cheque ? "cheque" : "comprobante") *</label>
+            <input class="form-control form-control-sm" maxlength="50" @bind="Pago.Referencia" />
+        </div>
+        <div class="col-sm-6">
+            <label class="form-label small mb-0">Banco</label>
+            <input class="form-control form-control-sm" maxlength="100" @bind="Pago.Banco" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public PagoModel Pago { get; set; } = default!;
+    /// <summary>Monto sugerido (saldo pendiente) para completarlo con un clic.</summary>
+    [Parameter] public decimal? Sugerido { get; set; }
+}

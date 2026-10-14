@@ -1,0 +1,149 @@
+@page "/inventario/kardex"
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>Kardex</PageTitle>
+
+<div class="page-header">
+    <h1><i class="bi bi-journal-text"></i> Kardex</h1>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body row g-2 align-items-end">
+        <div class="col-sm-6 col-lg-3">
+            <label class="form-label small">Producto</label>
+            <select class="form-select" @bind="productoId" @bind:after="CargarAsync">
+                <option value="">Todos</option>
+                @foreach (var p in productos)
+                {
+                    <option value="@p.Id">@p.Codigo · @p.Nombre</option>
+                }
+            </select>
+        </div>
+        <div class="col-sm-6 col-lg-2">
+            <label class="form-label small">Tipo</label>
+            <select class="form-select" @bind="tipo" @bind:after="CargarAsync">
+                <option value="">Todos</option>
+                @foreach (var t in Enum.GetValues<TipoMovimiento>())
+                {
+                    <option value="@t">@t.Nombre()</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small">Desde</label>
+            <input type="date" class="form-control" @bind="desde" @bind:after="CargarAsync" />
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small">Hasta</label>
+            <input type="date" class="form-control" @bind="hasta" @bind:after="CargarAsync" />
+        </div>
+        <div class="col-lg-3">
+            @if (Lote is not null)
+            {
+                <div class="alert alert-info py-1 px-2 mb-0 d-flex align-items-center gap-2 small">
+                    <span class="me-auto">Lote <code>@loteCodigo</code></span>
+                    <a class="btn btn-sm btn-link p-0" href="inventario/kardex">Quitar filtro</a>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive tabla-scroll">
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Fecha</th><th>Tipo</th><th>Producto</th><th>Lote</th><th>Origen</th><th>Destino</th>
+                    <th class="num">Cantidad</th><th>Referencia</th><th>Observación</th><th>Usuario</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var m in movimientos)
+                {
+                    <tr>
+                        <td class="text-nowrap">@m.Fecha.ToString("dd/MM/yyyy HH:mm")</td>
+                        <td><span class="badge @m.Tipo.ClaseBadge()">@m.Tipo.Nombre()</span></td>
+                        <td>@m.Lote.Producto.Nombre</td>
+                        <td><a href="@($"inventario/kardex?lote={m.LoteId}")"><code>@m.Lote.Codigo</code></a></td>
+                        <td class="small">@(m.UbicacionOrigen is null ? "—" : $"{m.UbicacionOrigen.Bodega.Codigo} · {m.UbicacionOrigen.Codigo}")</td>
+                        <td class="small">@(m.UbicacionDestino is null ? "—" : $"{m.UbicacionDestino.Bodega.Codigo} · {m.UbicacionDestino.Codigo}")</td>
+                        <td class="num fw-semibold @Signo(m).clase">@Signo(m).texto@m.Cantidad.ToString("N3")</td>
+                        <td class="small">@m.Referencia</td>
+                        <td class="small">@m.Observacion</td>
+                        <td class="small">@m.Usuario.UserName</td>
+                    </tr>
+                }
+                @if (movimientos.Count == 0)
+                {
+                    <tr><td colspan="10" class="text-center text-body-secondary py-4">Sin movimientos para los filtros seleccionados.</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+    @if (movimientos.Count == Limite)
+    {
+        <div class="card-footer small text-body-secondary">Se muestran los últimos @Limite movimientos. Ajuste los filtros para acotar.</div>
+    }
+</div>
+
+@code {
+    private const int Limite = 500;
+
+    [SupplyParameterFromQuery(Name = "lote")]
+    public int? Lote { get; set; }
+
+    private List<Producto> productos = [];
+    private List<MovimientoInventario> movimientos = [];
+    private int? productoId;
+    private TipoMovimiento? tipo;
+    private DateTime? desde = DateTime.Today.AddDays(-30);
+    private DateTime? hasta = DateTime.Today;
+    private string? loteCodigo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        productos = await db.Productos.AsNoTracking().OrderBy(p => p.Nombre).ToListAsync();
+    }
+
+    // Se recarga también al cambiar ?lote= (navegar desde la misma página)
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Lote is not null)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            loteCodigo = await db.Lotes.Where(l => l.Id == Lote).Select(l => l.Codigo).FirstOrDefaultAsync();
+            desde = null; // la trazabilidad de un lote se ve completa
+        }
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var hastaExclusivo = hasta?.Date.AddDays(1);
+        movimientos = await db.MovimientosInventario.AsNoTracking()
+            .Include(m => m.Lote).ThenInclude(l => l.Producto)
+            .Include(m => m.UbicacionOrigen).ThenInclude(u => u!.Bodega)
+            .Include(m => m.UbicacionDestino).ThenInclude(u => u!.Bodega)
+            .Include(m => m.Usuario)
+            .Where(m => Lote == null || m.LoteId == Lote)
+            .Where(m => productoId == null || m.Lote.ProductoId == productoId)
+            .Where(m => tipo == null || m.Tipo == tipo)
+            .Where(m => desde == null || m.Fecha >= desde)
+            .Where(m => hastaExclusivo == null || m.Fecha < hastaExclusivo)
+            .OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Id)
+            .Take(Limite)
+            .AsSplitQuery()
+            .ToListAsync();
+    }
+
+    private static (string texto, string clase) Signo(MovimientoInventario m) =>
+        (m.UbicacionOrigen, m.UbicacionDestino) switch
+        {
+            (null, not null) => ("+", "text-success"),
+            (not null, null) => ("−", "text-danger"),
+            _ => ("", "")
+        };
+}
